@@ -1,0 +1,1071 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Simpul — ISP Billing &amp; Monitoring</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/supabase-js/2.45.4/supabase.min.js"></script>
+<script src="config.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+  :root{
+    --bg: #f4f5f3;
+    --surface: #ffffff;
+    --surface-2: #eceeea;
+    --ink: #14171c;
+    --ink-2: #5b6470;
+    --ink-3: #8b93a0;
+    --line: #e0e2de;
+    --line-2: #cdd0cb;
+
+    --wire-blue: #1e5aa8;
+    --wire-blue-soft: #e8f0fa;
+    --wire-orange: #d8722a;
+    --wire-orange-soft: #fbead9;
+
+    --on: #1f9d6d;
+    --on-soft: #e4f5ed;
+    --off: #e14f4f;
+    --off-soft: #fdecec;
+    --iso: #d69a1f;
+    --iso-soft: #faf1dc;
+
+    --radius-s: 6px;
+    --radius-m: 10px;
+    --shadow-1: 0 1px 2px rgba(20,23,28,0.04), 0 1px 1px rgba(20,23,28,0.03);
+    --shadow-2: 0 12px 32px rgba(20,23,28,0.10), 0 2px 8px rgba(20,23,28,0.06);
+
+    --display: 'Space Grotesk', sans-serif;
+    --body: 'Inter', sans-serif;
+    --mono: 'IBM Plex Mono', monospace;
+  }
+
+  *{ box-sizing: border-box; }
+  html,body{ height:100%; }
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:var(--body); font-size:14px; -webkit-font-smoothing:antialiased;
+  }
+  button{ font-family:inherit; cursor:pointer; }
+  input{ font-family:inherit; }
+  ::selection{ background: var(--wire-blue); color:#fff; }
+
+  :focus-visible{ outline: 2px solid var(--wire-blue); outline-offset: 2px; }
+
+  /* ============ LOGIN ============ */
+  #login-view{
+    min-height:100vh; display:flex; align-items:center; justify-content:center;
+    background:
+      radial-gradient(circle at 20% 15%, rgba(30,90,168,0.06), transparent 45%),
+      radial-gradient(circle at 82% 75%, rgba(216,114,42,0.05), transparent 45%),
+      var(--bg);
+  }
+  .login-card{
+    width: 360px; background:var(--surface); border:1px solid var(--line);
+    border-radius: var(--radius-m); padding: 36px 32px 30px; box-shadow: var(--shadow-2);
+  }
+  .brandmark{ display:flex; align-items:center; gap:10px; margin-bottom: 26px; }
+  .brandmark .knot{ width:26px; height:26px; flex-shrink:0; }
+  .brandmark .name{ font-family:var(--display); font-weight:700; font-size:18px; letter-spacing:-0.2px; }
+  .pair-rule{ height:3px; width:100%; border-radius:2px; margin: 4px 0 24px; background: linear-gradient(90deg, var(--wire-blue) 0 50%, var(--wire-orange) 50% 100%); }
+  .login-card h1{ font-family:var(--display); font-size:19px; font-weight:600; margin:0 0 4px; }
+  .login-card p.sub{ color:var(--ink-2); font-size:13px; margin:0 0 22px; }
+  .field{ margin-bottom:14px; }
+  .field label{ display:block; font-size:12px; color:var(--ink-2); margin-bottom:6px; font-weight:500; }
+  .field input{
+    width:100%; padding:10px 12px; border:1px solid var(--line-2); border-radius:var(--radius-s);
+    font-size:13.5px; background:var(--surface); color:var(--ink);
+  }
+  .field input:focus{ border-color:var(--wire-blue); }
+  .btn{
+    border:none; border-radius:var(--radius-s); padding:10px 16px; font-size:13.5px; font-weight:600;
+    display:inline-flex; align-items:center; justify-content:center; gap:7px; transition: transform .08s ease, background .15s ease;
+  }
+  .btn:active{ transform: scale(0.98); }
+  .btn-primary{ background:var(--ink); color:#fff; width:100%; padding:11px; margin-top:6px; }
+  .btn-primary:hover{ background:#000; }
+  .btn-ghost{ background:transparent; color:var(--ink-2); border:1px solid var(--line-2); }
+  .btn-ghost:hover{ border-color:var(--ink-3); color:var(--ink); }
+  .btn-danger{ background:var(--off-soft); color:var(--off); }
+  .btn-danger:hover{ background:#fbdada; }
+  .login-hint{ margin-top:18px; font-size:11.5px; color:var(--ink-3); text-align:center; }
+
+  /* ============ APP SHELL ============ */
+  #app-shell{ display:none; min-height:100vh; }
+  .shell{ display:grid; grid-template-columns: 216px 1fr; min-height:100vh; }
+
+  .sidebar{
+    background:var(--surface); border-right:1px solid var(--line);
+    display:flex; flex-direction:column; padding: 20px 14px;
+  }
+  .sidebar .brandmark{ padding:0 8px; margin-bottom:22px; }
+  .nav-group{ display:flex; flex-direction:column; gap:2px; }
+  .nav-item{
+    display:flex; align-items:center; gap:10px; padding:9px 10px; border-radius:var(--radius-s);
+    color:var(--ink-2); font-size:13.5px; font-weight:500; background:none; border:none; text-align:left;
+    border-left: 3px solid transparent; width:100%;
+  }
+  .nav-item svg{ width:16px; height:16px; flex-shrink:0; }
+  .nav-item:hover{ background:var(--surface-2); color:var(--ink); }
+  .nav-item.active{
+    color:var(--ink); background: var(--surface-2);
+    border-left: 3px solid; border-image: linear-gradient(180deg, var(--wire-blue), var(--wire-orange)) 1;
+  }
+  .site-switcher{ margin: 2px 4px 18px; }
+  .site-switcher label{ display:block; font-size:10.5px; color:var(--ink-3); font-weight:600; text-transform:uppercase; letter-spacing:.4px; margin-bottom:6px; }
+  .site-switcher select{
+    width:100%; padding:8px 10px; border:1px solid var(--line-2); border-radius:var(--radius-s);
+    font-size:12.5px; background:var(--surface-2); color:var(--ink); font-weight:600;
+  }
+  .topbar-site{
+    font-family:var(--mono); font-size:11px; color:var(--ink-2); background:var(--surface-2);
+    padding:4px 10px; border-radius:12px; margin-left:12px; font-weight:600;
+  }
+  .status-dot-sm{ display:inline-block; width:6px; height:6px; border-radius:50%; margin-right:5px; }
+  .sidebar-bottom{ margin-top:auto; padding-top:14px; border-top:1px solid var(--line); }
+  .agent-badge{
+    display:flex; align-items:center; gap:8px; padding:9px 10px; border-radius:var(--radius-s);
+    background:var(--on-soft); font-size:11.5px; color:#166b48; font-weight:600; font-family:var(--mono);
+  }
+  .agent-badge .dot{ width:6px; height:6px; border-radius:50%; background:var(--on); animation: pulse 2s infinite; }
+  @keyframes pulse{ 0%,100%{opacity:1} 50%{opacity:.3} }
+
+  .main{ display:flex; flex-direction:column; min-height:100vh; min-width:0; }
+
+  .topbar{
+    height:58px; border-bottom:1px solid var(--line); background:var(--surface);
+    display:flex; align-items:center; justify-content:space-between; padding:0 24px; flex-shrink:0;
+  }
+  .topbar .title{ font-family:var(--display); font-weight:600; font-size:16px; }
+  .topbar-right{ display:flex; align-items:center; gap:14px; }
+  .search-box{
+    display:flex; align-items:center; gap:7px; background:var(--surface-2); border-radius:20px;
+    padding:7px 13px; width:220px; color:var(--ink-3);
+  }
+  .search-box input{ border:none; background:none; outline:none; font-size:12.5px; width:100%; color:var(--ink); }
+  .search-box svg{ width:14px; height:14px; flex-shrink:0; }
+  .avatar{
+    width:30px; height:30px; border-radius:50%; background:var(--ink); color:#fff;
+    display:flex; align-items:center; justify-content:center; font-family:var(--display); font-size:12px; font-weight:700;
+  }
+
+  .page{ display:none; padding: 26px 28px 60px; flex:1; }
+  .page.active{ display:block; animation: fadein .25s ease; }
+  @keyframes fadein{ from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:none;} }
+
+  .page-head{ margin-bottom: 20px; }
+  .page-head h2{ font-family:var(--display); font-size:20px; font-weight:600; margin:0 0 4px; }
+  .page-head p{ color:var(--ink-2); font-size:13px; margin:0; max-width:560px; }
+
+  /* ============ CARDS / KPI ============ */
+  .kpi-row{ display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:22px; }
+  .kpi{
+    background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-m);
+    padding:16px 18px; box-shadow:var(--shadow-1);
+  }
+  .kpi .lbl{ font-size:11.5px; color:var(--ink-2); font-weight:600; text-transform:uppercase; letter-spacing:.4px; display:flex; align-items:center; gap:6px;}
+  .kpi .lbl .sw{ width:7px; height:7px; border-radius:50%; }
+  .kpi .num{ font-family:var(--display); font-size:26px; font-weight:700; margin-top:8px; }
+  .kpi .delta{ font-size:11.5px; color:var(--ink-3); margin-top:3px; font-family:var(--mono); }
+
+  .grid-2{ display:grid; grid-template-columns: 1.5fr 1fr; gap:16px; }
+
+  .card{
+    background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-m);
+    padding:18px 20px; box-shadow:var(--shadow-1);
+  }
+  .card-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
+  .card-head h3{ font-family:var(--display); font-size:14.5px; font-weight:600; margin:0; }
+  .card-head .muted{ font-size:11.5px; color:var(--ink-3); font-family:var(--mono); }
+
+  .bars{ display:flex; align-items:flex-end; gap:7px; height:150px; }
+  .bar-wrap{ flex:1; display:flex; flex-direction:column; align-items:center; gap:6px; }
+  .bar{ width:100%; border-radius:3px 3px 0 0; background: var(--wire-blue-soft); position:relative; overflow:hidden; }
+  .bar::after{ content:''; position:absolute; inset:0; background:var(--wire-blue); opacity:.85; }
+  .bar-wrap .bl{ font-size:9.5px; color:var(--ink-3); font-family:var(--mono); }
+
+  .feed{ display:flex; flex-direction:column; gap:2px; }
+  .feed-row{
+    display:flex; align-items:center; gap:9px; padding:8px 4px; border-bottom:1px solid var(--line);
+    font-size:12.5px;
+  }
+  .feed-row:last-child{ border-bottom:none; }
+  .feed-row .dot{ width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+  .feed-row .who{ font-weight:600; flex:1; }
+  .feed-row .when{ color:var(--ink-3); font-family:var(--mono); font-size:10.5px; }
+  .feed-row.alert{ background:var(--off-soft); margin:0 -4px; padding:8px; border-radius:var(--radius-s); border-bottom:none; }
+
+  /* ============ MAP PAGE ============ */
+  .map-toolbar{ display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap; align-items:center; }
+  .chip{
+    border:1px solid var(--line-2); background:var(--surface); border-radius:20px; padding:6px 13px;
+    font-size:12px; color:var(--ink-2); font-weight:500; display:flex; align-items:center; gap:6px;
+  }
+  .chip.on{ border-color:var(--ink); color:var(--ink); background:var(--surface-2); }
+  .chip .sw{ width:7px; height:7px; border-radius:50%; }
+
+  .map-wrap{
+    position:relative; height:520px; border-radius:var(--radius-m); overflow:hidden;
+    border:1px solid var(--line); background:#eef1ee; box-shadow:var(--shadow-1);
+  }
+  .map-wrap svg.streets{ position:absolute; inset:0; width:100%; height:100%; }
+  .pin{
+    position:absolute; width:14px; height:14px; border-radius:50% 50% 50% 0; transform:translate(-50%,-100%) rotate(-45deg);
+    border:2px solid #fff; box-shadow:0 1px 4px rgba(0,0,0,.28); cursor:pointer; transition: transform .12s ease;
+  }
+  .pin:hover{ transform:translate(-50%,-100%) rotate(-45deg) scale(1.25); z-index:5; }
+  .pin.hidden-pin{ display:none; }
+  .map-legend{
+    position:absolute; bottom:14px; left:14px; background:var(--surface); border:1px solid var(--line);
+    border-radius:var(--radius-s); padding:10px 13px; display:flex; flex-direction:column; gap:6px; font-size:11.5px;
+    box-shadow:var(--shadow-1);
+  }
+  .map-legend .row{ display:flex; align-items:center; gap:7px; color:var(--ink-2); }
+  .map-legend .sw{ width:9px; height:9px; border-radius:50%; }
+
+  /* ============ TABLE ============ */
+  .table-wrap{ background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-m); overflow:hidden; box-shadow:var(--shadow-1); }
+  table{ width:100%; border-collapse:collapse; font-size:12.8px; }
+  thead th{
+    text-align:left; padding:11px 16px; font-size:11px; text-transform:uppercase; letter-spacing:.4px;
+    color:var(--ink-3); font-weight:600; border-bottom:1px solid var(--line); background:var(--surface-2);
+  }
+  tbody td{ padding:11px 16px; border-bottom:1px solid var(--line); vertical-align:middle; }
+  tbody tr:last-child td{ border-bottom:none; }
+  tbody tr:hover{ background:#fafaf9; }
+  .badge{
+    display:inline-flex; align-items:center; gap:5px; padding:3px 9px; border-radius:20px;
+    font-size:11px; font-weight:600;
+  }
+  .badge .sw{ width:6px; height:6px; border-radius:50%; }
+  .badge.on{ background:var(--on-soft); color:#166b48; }
+  .badge.off{ background:var(--off-soft); color:#a33333; }
+  .badge.iso{ background:var(--iso-soft); color:#8f6a13; }
+  .badge.type{ background:var(--wire-blue-soft); color:var(--wire-blue); }
+  .badge.type.olt{ background:var(--wire-orange-soft); color:var(--wire-orange); }
+  .mono-cell{ font-family:var(--mono); font-size:12px; }
+  .row-link{ background:none; border:none; color:var(--wire-blue); font-weight:600; font-size:12.5px; padding:0; }
+  .row-link:hover{ text-decoration:underline; }
+
+  /* ============ CREDENTIAL REVEAL ============ */
+  .cred-box{
+    display:flex; align-items:center; gap:8px; background:var(--surface-2); border:1px solid var(--line-2);
+    border-radius:var(--radius-s); padding:8px 10px; font-family:var(--mono); font-size:12.5px;
+  }
+  .cred-val{ flex:1; letter-spacing:1px; }
+  .cred-val.masked{ color:var(--ink-3); }
+  .icon-btn{
+    background:none; border:none; color:var(--ink-2); padding:4px; border-radius:5px; display:flex;
+  }
+  .icon-btn:hover{ background:var(--line); color:var(--ink); }
+  .icon-btn svg{ width:15px; height:15px; }
+
+  /* ============ DRAWER ============ */
+  .overlay{
+    position:fixed; inset:0; background:rgba(20,23,28,0.28); opacity:0; pointer-events:none;
+    transition:opacity .2s ease; z-index:40;
+  }
+  .overlay.open{ opacity:1; pointer-events:auto; }
+  .drawer{
+    position:fixed; top:0; right:0; height:100vh; width:400px; background:var(--surface);
+    box-shadow:var(--shadow-2); transform:translateX(100%); transition: transform .25s ease; z-index:41;
+    display:flex; flex-direction:column; border-left:1px solid var(--line);
+  }
+  .drawer.open{ transform:translateX(0); }
+  .drawer-head{ padding:20px 22px 16px; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; align-items:flex-start; }
+  .drawer-head h3{ font-family:var(--display); font-size:17px; font-weight:600; margin:0 0 3px; }
+  .drawer-head .addr{ font-size:12px; color:var(--ink-2); }
+  .drawer-close{ background:none; border:none; color:var(--ink-3); padding:4px; }
+  .drawer-body{ padding:18px 22px; overflow-y:auto; flex:1; display:flex; flex-direction:column; gap:18px; }
+  .dblock label{ display:block; font-size:11px; color:var(--ink-3); font-weight:600; text-transform:uppercase; letter-spacing:.4px; margin-bottom:7px; }
+  .info-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px 14px; font-size:13px; }
+  .info-grid .ig-label{ color:var(--ink-3); font-size:11px; margin-bottom:2px; }
+  .drawer-actions{ display:flex; gap:8px; padding:16px 22px; border-top:1px solid var(--line); }
+  .drawer-actions .btn{ flex:1; }
+  .audit-mini{ font-size:11px; color:var(--ink-3); font-family:var(--mono); }
+
+  /* ============ VOUCHER PAGE ============ */
+  .voucher-form{ display:grid; grid-template-columns: 1fr 1fr 1fr auto; gap:12px; align-items:end; }
+  .voucher-form .field{ margin:0; }
+  .voucher-form select{
+    width:100%; padding:10px 12px; border:1px solid var(--line-2); border-radius:var(--radius-s);
+    font-size:13px; background:var(--surface); color:var(--ink);
+  }
+
+  /* ============ TOAST ============ */
+  #toast-container{ position:fixed; bottom:20px; right:20px; display:flex; flex-direction:column; gap:8px; z-index:60; }
+  .toast{
+    background:var(--ink); color:#fff; padding:11px 16px; border-radius:var(--radius-s); font-size:12.8px;
+    box-shadow:var(--shadow-2); display:flex; align-items:center; gap:9px; animation: toastin .22s ease;
+    min-width:220px;
+  }
+  .toast .sw{ width:7px; height:7px; border-radius:50%; background:var(--on); flex-shrink:0; }
+  @keyframes toastin{ from{ opacity:0; transform:translateY(8px);} to{opacity:1; transform:none;} }
+
+  .empty-note{ font-size:12px; color:var(--ink-3); text-align:center; padding:26px; font-family:var(--mono); }
+
+  @media (max-width: 900px){
+    .shell{ grid-template-columns:1fr; }
+    .sidebar{ display:none; }
+    .kpi-row{ grid-template-columns:repeat(2,1fr); }
+    .grid-2{ grid-template-columns:1fr; }
+    .drawer{ width:100%; }
+    .voucher-form{ grid-template-columns:1fr; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ============ LOGIN ============ -->
+<div id="login-view">
+  <div class="login-card">
+    <div class="brandmark">
+      <svg class="knot" viewBox="0 0 26 26" fill="none">
+        <circle cx="13" cy="13" r="11" stroke="#14171c" stroke-width="1.4"/>
+        <path d="M8 13 C8 9, 18 9, 18 13 C18 17, 8 17, 8 13Z" stroke="#1e5aa8" stroke-width="1.6"/>
+        <path d="M13 8 C17 8, 17 18, 13 18 C9 18, 9 8, 13 8Z" stroke="#d8722a" stroke-width="1.6"/>
+      </svg>
+      <span class="name">Simpul</span>
+    </div>
+    <div class="pair-rule"></div>
+    <h1>Masuk ke akun</h1>
+    <p class="sub">Kendali jaringan &amp; pelanggan dalam satu layar.</p>
+    <div class="field">
+      <label>Email</label>
+      <input type="text" placeholder="admin@perusahaan-anda.com" id="login-email">
+    </div>
+    <div class="field">
+      <label>Kata sandi</label>
+      <input type="password" placeholder="Kata sandi" id="login-pass">
+    </div>
+    <button class="btn btn-primary" onclick="doLogin()" id="login-btn">Masuk</button>
+    <p class="login-hint" id="login-hint" style="color:var(--off);"></p>
+  </div>
+</div>
+
+<!-- ============ APP SHELL ============ -->
+<div id="app-shell">
+  <div class="shell">
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+      <div class="brandmark">
+        <svg class="knot" viewBox="0 0 26 26" fill="none">
+          <circle cx="13" cy="13" r="11" stroke="#14171c" stroke-width="1.4"/>
+          <path d="M8 13 C8 9, 18 9, 18 13 C18 17, 8 17, 8 13Z" stroke="#1e5aa8" stroke-width="1.6"/>
+          <path d="M13 8 C17 8, 17 18, 13 18 C9 18, 9 8, 13 8Z" stroke="#d8722a" stroke-width="1.6"/>
+        </svg>
+        <span class="name">Simpul</span>
+      </div>
+
+      <div class="site-switcher">
+        <label>Server Aktif</label>
+        <select id="site-select" onchange="switchSite(this.value)">
+          <option value="all">Semua Server</option>
+        </select>
+      </div>
+
+      <nav class="nav-group">
+        <button class="nav-item active" data-page="dashboard" onclick="goPage('dashboard')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="5" rx="1.5"/><rect x="13" y="10" width="8" height="11" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/></svg>
+          Dashboard
+        </button>
+        <button class="nav-item" data-page="map" onclick="goPage('map')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 21s7-6.5 7-12a7 7 0 10-14 0c0 5.5 7 12 7 12z"/><circle cx="12" cy="9" r="2.3"/></svg>
+          Peta Pelanggan
+        </button>
+        <button class="nav-item" data-page="customers" onclick="goPage('customers')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.5 2.7-6 6-6s6 2.5 6 6"/><circle cx="17" cy="8" r="2.6"/><path d="M15.5 14.3c2.6.4 4.5 2.6 4.5 5.7"/></svg>
+          Pelanggan
+        </button>
+        <button class="nav-item" data-page="team" onclick="goPage('team')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M14.7 6.3a2.4 2.4 0 11-3.4 3.4L4 17v3h3l7.3-7.3"/><path d="M17.5 3.5l3 3-2 2-3-3z"/></svg>
+          Tim Teknisi
+        </button>
+        <button class="nav-item" data-page="voucher" onclick="goPage('voucher')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 8a2 2 0 012-2h14a2 2 0 012 2v2a2 2 0 000 4v2a2 2 0 01-2 2H5a2 2 0 01-2-2v-2a2 2 0 000-4V8z"/><path d="M9 6v12" stroke-dasharray="2 2"/></svg>
+          Voucher
+        </button>
+        <button class="nav-item" data-page="settings" onclick="goPage('settings')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="3"/><path d="M19.4 13a1.7 1.7 0 00.3 1.9l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.9-.3 1.7 1.7 0 00-1 1.6V19a2 2 0 11-4 0v-.2a1.7 1.7 0 00-1-1.5 1.7 1.7 0 00-1.9.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.9 1.7 1.7 0 00-1.6-1H4a2 2 0 110-4h.2a1.7 1.7 0 001.5-1 1.7 1.7 0 00-.3-1.9l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.9.3H10a1.7 1.7 0 001-1.6V4a2 2 0 114 0v.2a1.7 1.7 0 001 1.6 1.7 1.7 0 001.9-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.9V10a1.7 1.7 0 001.6 1H20a2 2 0 110 4h-.2a1.7 1.7 0 00-1.6 1z"/></svg>
+          Pengaturan
+        </button>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="agent-badge"><span class="dot"></span> AGENT-LOKAL AKTIF</div>
+      </div>
+    </aside>
+
+    <!-- MAIN -->
+    <div class="main">
+      <div class="topbar">
+        <div style="display:flex; align-items:center;">
+          <div class="title" id="topbar-title">Dashboard</div>
+          <span class="topbar-site" id="topbar-site-badge">Semua Server</span>
+        </div>
+        <div class="topbar-right">
+          <div class="search-box">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+            <input type="text" placeholder="Cari pelanggan, ID, voucher…" id="global-search" oninput="onGlobalSearch()">
+          </div>
+          <div class="avatar">RA</div>
+        </div>
+      </div>
+
+      <!-- PAGE: DASHBOARD -->
+      <div class="page active" id="page-dashboard">
+        <div class="page-head">
+          <h2>Ringkasan Jaringan</h2>
+          <p>Kondisi jaringan &amp; billing hari ini, diperbarui otomatis dari MikroTik &amp; OLT.</p>
+        </div>
+
+        <div class="kpi-row">
+          <div class="kpi">
+            <div class="lbl"><span class="sw" style="background:var(--on)"></span>Online</div>
+            <div class="num" id="kpi-online">—</div>
+            <div class="delta" id="kpi-online-sub">—</div>
+          </div>
+          <div class="kpi">
+            <div class="lbl"><span class="sw" style="background:var(--off)"></span>Offline</div>
+            <div class="num" id="kpi-offline">—</div>
+            <div class="delta">dari total pelanggan server ini</div>
+          </div>
+          <div class="kpi">
+            <div class="lbl"><span class="sw" style="background:var(--iso)"></span>Isolir</div>
+            <div class="num" id="kpi-isolir">—</div>
+            <div class="delta" id="kpi-isolir-sub">—</div>
+          </div>
+          <div class="kpi">
+            <div class="lbl">Pendapatan · Bulan Ini</div>
+            <div class="num" id="kpi-revenue">—</div>
+            <div class="delta">↑ 4.2% dari bulan lalu</div>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-head">
+              <h3>Online vs Offline — 24 jam terakhir</h3>
+              <span class="muted">rata-rata / jam</span>
+            </div>
+            <div class="bars" id="bar-chart"></div>
+          </div>
+          <div class="card">
+            <div class="card-head">
+              <h3>Aktivitas Terbaru</h3>
+              <span class="muted">live</span>
+            </div>
+            <div class="feed">
+              <div class="feed-row alert"><span class="dot" style="background:var(--off)"></span><span class="who">⚠ Gangguan massal — ODP-14 (12 pelanggan)</span><span class="when">2 mnt</span></div>
+              <div class="feed-row"><span class="dot" style="background:var(--off)"></span><span class="who">Budi Santoso — offline</span><span class="when">3 mnt</span></div>
+              <div class="feed-row"><span class="dot" style="background:var(--iso)"></span><span class="who">Ahmad Fauzi — jatuh tempo H+3</span><span class="when">14 mnt</span></div>
+              <div class="feed-row"><span class="dot" style="background:var(--on)"></span><span class="who">Toko Jaya Makmur — kembali online</span><span class="when">22 mnt</span></div>
+              <div class="feed-row"><span class="dot" style="background:var(--wire-blue)"></span><span class="who">Voucher HOTSPOT-2H dibuat ×50</span><span class="when">41 mnt</span></div>
+              <div class="feed-row"><span class="dot" style="background:var(--on)"></span><span class="who">Rina Wulandari — pembayaran diterima</span><span class="when">1 jam</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- PAGE: MAP -->
+      <div class="page" id="page-map">
+        <div class="page-head">
+          <h2>Peta Pelanggan</h2>
+          <p>Klik titik untuk melihat detail pelanggan, kredensial PPPoE, dan status koneksi.</p>
+        </div>
+        <div class="map-toolbar">
+          <button class="chip on" data-filter="all" onclick="filterMap('all', this)">Semua</button>
+          <button class="chip" data-filter="Aktif" onclick="filterMap('Aktif', this)"><span class="sw" style="background:var(--on)"></span>Online</button>
+          <button class="chip" data-filter="Offline" onclick="filterMap('Offline', this)"><span class="sw" style="background:var(--off)"></span>Offline</button>
+          <button class="chip" data-filter="Isolir" onclick="filterMap('Isolir', this)"><span class="sw" style="background:var(--iso)"></span>Isolir</button>
+        </div>
+        <div class="map-wrap">
+          <svg class="streets" viewBox="0 0 100 100" preserveAspectRatio="none">
+            <rect width="100" height="100" fill="#eef1ee"/>
+            <path d="M0 30 H100 M0 62 H100 M18 0 V100 M46 0 V100 M74 0 V100" stroke="#dfe3de" stroke-width="0.6"/>
+            <path d="M0 46 H100 M32 0 V100 M60 0 V100 M88 0 V100" stroke="#e6e9e4" stroke-width="0.35"/>
+          </svg>
+          <div id="map-pins"></div>
+          <div class="map-legend">
+            <div class="row"><span class="sw" style="background:var(--on)"></span>Online</div>
+            <div class="row"><span class="sw" style="background:var(--off)"></span>Offline</div>
+            <div class="row"><span class="sw" style="background:var(--iso)"></span>Isolir</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- PAGE: CUSTOMERS -->
+      <div class="page" id="page-customers">
+        <div class="page-head">
+          <h2>Pelanggan</h2>
+          <p>Data pelanggan, akses jaringan, dan kredensial PPPoE.</p>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Nama</th><th>ID</th><th>Server</th><th>Akses</th><th>Paket</th><th>Status</th><th>Username PPPoE</th><th></th></tr>
+            </thead>
+            <tbody id="customers-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- PAGE: TEAM -->
+      <div class="page" id="page-team">
+        <div class="page-head">
+          <h2>Tim Teknisi</h2>
+          <p>Teknisi yang ditugaskan per server, supaya tiket gangguan otomatis terarah ke tim yang benar.</p>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Nama</th><th>Server</th><th>Status</th><th>Tiket Aktif</th></tr>
+            </thead>
+            <tbody id="team-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- PAGE: VOUCHER -->
+      <div class="page" id="page-voucher">
+        <div class="page-head">
+          <h2>Voucher Hotspot</h2>
+          <p>Buat voucher prabayar dalam jumlah banyak, langsung terhubung ke MikroTik lewat antrean perintah.</p>
+        </div>
+        <div class="card" style="margin-bottom:18px;">
+          <div class="voucher-form">
+            <div class="field">
+              <label>Paket</label>
+              <select id="v-package">
+                <option>2 Jam — Rp 3.000</option>
+                <option>1 Hari — Rp 5.000</option>
+                <option>7 Hari — Rp 25.000</option>
+                <option>30 Hari — Rp 90.000</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Jumlah voucher</label>
+              <input type="number" id="v-count" value="10" min="1" max="200">
+            </div>
+            <div class="field">
+              <label>Profil Hotspot</label>
+              <select id="v-profile">
+                <option>hotspot-basic</option>
+                <option>hotspot-fast</option>
+              </select>
+            </div>
+            <button class="btn btn-primary" style="width:auto; padding:10px 18px;" onclick="generateVouchers()">Buat Voucher</button>
+          </div>
+          <div class="field" style="margin-top:12px; max-width:260px;">
+            <label>Server tujuan</label>
+            <select id="v-site">
+              <option value="A">Server A — Kantor Pusat</option>
+              <option value="B">Server B — Cluster Utara</option>
+              <option value="C">Server C — Cluster Selatan</option>
+            </select>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Kode</th><th>Server</th><th>Paket</th><th>Status</th><th>Dibuat</th><th></th></tr>
+            </thead>
+            <tbody id="voucher-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- PAGE: SETTINGS -->
+      <div class="page" id="page-settings">
+        <div class="page-head">
+          <h2>Pengaturan &amp; Koneksi</h2>
+          <p>Setiap server punya agent lokal sendiri — kalau satu agent putus, server lain tetap jalan normal.</p>
+        </div>
+        <div class="grid-2">
+          <div id="agents-container" style="display:flex; flex-direction:column; gap:14px;"></div>
+          <div class="card">
+            <div class="card-head"><h3>Audit Log Terbaru</h3><span class="muted">akses kredensial</span></div>
+            <div class="feed">
+              <div class="feed-row"><span class="dot" style="background:var(--wire-blue)"></span><span class="who">admin melihat sandi PPPoE — Budi Santoso</span><span class="when">10:42</span></div>
+              <div class="feed-row"><span class="dot" style="background:var(--wire-blue)"></span><span class="who">admin mengganti sandi — Rina Wulandari</span><span class="when">09:15</span></div>
+              <div class="feed-row"><span class="dot" style="background:var(--wire-orange)"></span><span class="who">sistem membuat 50 voucher HOTSPOT-2H</span><span class="when">Kemarin</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- DRAWER -->
+<div class="overlay" id="overlay" onclick="closeDrawer()"></div>
+<div class="drawer" id="drawer">
+  <div class="drawer-head">
+    <div>
+      <h3 id="d-name">—</h3>
+      <div class="addr" id="d-addr">—</div>
+    </div>
+    <button class="drawer-close" onclick="closeDrawer()">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </div>
+  <div class="drawer-body">
+    <div class="dblock">
+      <label>Status Koneksi</label>
+      <span class="badge" id="d-status-badge"><span class="sw"></span><span id="d-status-text">—</span></span>
+    </div>
+    <div class="dblock">
+      <label>Informasi Pelanggan</label>
+      <div class="info-grid">
+        <div><div class="ig-label">ID Pelanggan</div><span id="d-id" class="mono-cell">—</span></div>
+        <div><div class="ig-label">Server</div><span id="d-site" class="mono-cell">—</span></div>
+        <div><div class="ig-label">Paket</div><span id="d-package">—</span></div>
+        <div><div class="ig-label">Jenis Akses</div><span id="d-access">—</span></div>
+        <div><div class="ig-label">Titik Distribusi</div><span id="d-node">—</span></div>
+      </div>
+    </div>
+    <div class="dblock">
+      <label>Username PPPoE</label>
+      <div class="cred-box"><span class="cred-val mono-cell" id="d-username">—</span></div>
+    </div>
+    <div class="dblock">
+      <label>Sandi PPPoE</label>
+      <div class="cred-box">
+        <span class="cred-val masked mono-cell" id="d-password">••••••••</span>
+        <button class="icon-btn" onclick="togglePassword()" title="Lihat/sembunyikan sandi">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M1.5 12S5 5 12 5s10.5 7 10.5 7-3.5 7-10.5 7S1.5 12 1.5 12z"/><circle cx="12" cy="12" r="3"/></svg>
+        </button>
+        <button class="icon-btn" onclick="copyPassword()" title="Salin sandi">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 012-2h10"/></svg>
+        </button>
+      </div>
+      <div class="audit-mini" style="margin-top:6px;" id="d-audit-note">Setiap akses sandi tercatat di audit log.</div>
+    </div>
+  </div>
+  <div class="drawer-actions">
+    <button class="btn btn-ghost" onclick="regenPassword()">Ganti Sandi</button>
+    <button class="btn btn-danger" id="d-toggle-status" onclick="toggleIsolir()">Isolir Pelanggan</button>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+
+<script>
+  // =========================================================
+  // SIMPUL — koneksi ke Supabase (data asli, bukan contoh)
+  // Isi URL & anon key di config.js — JANGAN taruh di file ini.
+  // =========================================================
+  const sb = window.supabase.createClient(
+    window.SIMPUL_CONFIG.supabaseUrl,
+    window.SIMPUL_CONFIG.supabaseAnonKey
+  );
+
+  // ---------- STATE ----------
+  let profile = null;          // {id, full_name, role, site_ids}
+  let sites = [];
+  let customers = [];
+  let technicians = [];
+  let vouchers = [];
+  let currentSite = 'all';
+  let currentCustomerId = null;
+  let passRevealed = false;
+  let realtimeChannel = null;
+
+  function rand(a,b){ return Math.floor(Math.random()*(b-a+1))+a; }
+
+  // ---------- LOGIN ----------
+  async function doLogin(){
+    const email = document.getElementById('login-email').value.trim();
+    const password = document.getElementById('login-pass').value;
+    const hint = document.getElementById('login-hint');
+    const btn = document.getElementById('login-btn');
+    hint.textContent = '';
+    if(!email || !password){ hint.textContent = 'Isi email dan kata sandi.'; return; }
+
+    btn.textContent = 'Memeriksa…'; btn.disabled = true;
+    const { data, error } = await sb.auth.signInWithPassword({ email, password });
+    btn.textContent = 'Masuk'; btn.disabled = false;
+
+    if(error){ hint.textContent = 'Gagal masuk: ' + error.message; return; }
+    await bootApp();
+  }
+
+  async function doLogout(){
+    await sb.auth.signOut();
+    if(realtimeChannel) sb.removeChannel(realtimeChannel);
+    document.getElementById('app-shell').style.display='none';
+    document.getElementById('login-view').style.display='flex';
+  }
+
+  // Kalau sesi masih aktif (reload halaman), langsung masuk ke app
+  async function checkExistingSession(){
+    const { data } = await sb.auth.getSession();
+    if(data.session){ await bootApp(); }
+  }
+
+  // ---------- BOOT ----------
+  async function bootApp(){
+    const { data: userData } = await sb.auth.getUser();
+    if(!userData.user){ return; }
+
+    const { data: prof, error: profErr } = await sb.from('profiles')
+      .select('*').eq('id', userData.user.id).single();
+
+    if(profErr || !prof){
+      document.getElementById('login-hint').textContent =
+        'Akun ini belum punya profil (role/server). Minta admin menambahkan baris di tabel profiles.';
+      await sb.auth.signOut();
+      return;
+    }
+    profile = prof;
+
+    document.getElementById('login-view').style.display='none';
+    document.getElementById('app-shell').style.display='block';
+    document.querySelector('.avatar').textContent =
+      profile.full_name.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+
+    await fetchAll();
+    populateSiteSwitcher();
+    renderAll();
+    subscribeRealtime();
+  }
+
+  // ---------- FETCH ----------
+  async function fetchAll(){
+    const [sRes, cRes, tRes, vRes] = await Promise.all([
+      sb.from('sites').select('*').order('name'),
+      sb.from('customers').select('*').order('name'),
+      sb.from('technicians').select('*').order('name'),
+      sb.from('vouchers').select('*').order('created_at', {ascending:false})
+    ]);
+    sites = sRes.data || [];
+    customers = cRes.data || [];
+    technicians = tRes.data || [];
+    vouchers = (vRes.data || []).map(v=>({...v, revealed_code:null}));
+    if(sRes.error) console.error(sRes.error);
+    if(cRes.error) console.error(cRes.error);
+  }
+
+  function populateSiteSwitcher(){
+    const sel = document.getElementById('site-select');
+    sel.innerHTML = '<option value="all">Semua Server</option>';
+    sites.forEach(s=>{
+      const opt = document.createElement('option');
+      opt.value = s.id; opt.textContent = s.name;
+      sel.appendChild(opt);
+    });
+  }
+
+  // ---------- REALTIME ----------
+  function subscribeRealtime(){
+    realtimeChannel = sb.channel('simpul-live')
+      .on('postgres_changes', {event:'*', schema:'public', table:'customers'}, async ()=>{
+        const { data } = await sb.from('customers').select('*').order('name');
+        customers = data || []; renderAll();
+      })
+      .on('postgres_changes', {event:'*', schema:'public', table:'vouchers'}, async ()=>{
+        const { data } = await sb.from('vouchers').select('*').order('created_at',{ascending:false});
+        vouchers = (data||[]).map(v=>({...v, revealed_code:null})); renderVoucherTable();
+      })
+      .on('postgres_changes', {event:'*', schema:'public', table:'sites'}, async ()=>{
+        const { data } = await sb.from('sites').select('*').order('name');
+        sites = data || []; renderAgents();
+      })
+      .subscribe();
+  }
+
+  // ---------- SITE SWITCH ----------
+  function inSite(item){ return currentSite==='all' || item.site_id===currentSite; }
+  function siteName(id){ const s=sites.find(s=>s.id===id); return s ? s.name : '—'; }
+
+  function switchSite(id){
+    currentSite = id;
+    document.getElementById('topbar-site-badge').textContent = id==='all' ? 'Semua Server' : siteName(id);
+    document.getElementById('global-search').value = '';
+    renderAll();
+  }
+
+  // ---------- NAV ----------
+  const titles = {dashboard:'Dashboard', map:'Peta Pelanggan', customers:'Pelanggan', team:'Tim Teknisi', voucher:'Voucher Hotspot', settings:'Pengaturan'};
+  function goPage(name){
+    document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+    document.getElementById('page-'+name).classList.add('active');
+    document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+    document.querySelector('.nav-item[data-page="'+name+'"]').classList.add('active');
+    document.getElementById('topbar-title').textContent = titles[name];
+  }
+
+  // ---------- RENDER ----------
+  function statusColor(s){ return s==='Aktif' ? 'var(--on)' : s==='Offline' ? 'var(--off)' : 'var(--iso)'; }
+  function statusClass(s){ return s==='Aktif' ? 'on' : s==='Offline' ? 'off' : 'iso'; }
+
+  function renderKPIs(){
+    const list = customers.filter(inSite);
+    const online = list.filter(c=>c.status==='Aktif').length;
+    const offline = list.filter(c=>c.status==='Offline').length;
+    const isolir = list.filter(c=>c.status==='Isolir').length;
+    document.getElementById('kpi-online').textContent = online;
+    document.getElementById('kpi-online-sub').textContent = 'dari '+list.length+' pelanggan';
+    document.getElementById('kpi-offline').textContent = offline;
+    document.getElementById('kpi-isolir').textContent = isolir;
+    document.getElementById('kpi-isolir-sub').textContent = isolir>0 ? isolir+' pelanggan tertunggak' : 'tidak ada tunggakan';
+    document.getElementById('kpi-revenue').textContent = '—'; // hubungkan ke tabel invoices bila sudah ada data
+  }
+
+  // Catatan: grafik ini butuh agregasi per jam dari tabel connection_logs.
+  // Ditampilkan sederhana dulu; ganti dengan query agregat saat data histori tersedia.
+  function renderBars(){
+    const el = document.getElementById('bar-chart'); el.innerHTML='';
+    const hours = ['00','03','06','09','12','15','18','21'];
+    const list = customers.filter(inSite);
+    const base = list.length ? Math.round(list.filter(c=>c.status==='Aktif').length / list.length * 100) : 0;
+    hours.forEach(h=>{
+      const pct = Math.max(10, Math.min(100, base + rand(-8,8)));
+      const wrap = document.createElement('div'); wrap.className='bar-wrap';
+      wrap.innerHTML = `<div class="bar" style="height:${pct}%"></div><span class="bl">${h}</span>`;
+      el.appendChild(wrap);
+    });
+  }
+
+  function renderPins(){
+    const el = document.getElementById('map-pins'); el.innerHTML='';
+    customers.filter(inSite).forEach((c)=>{
+      if(c.lat==null || c.lng==null) return;
+      const pin = document.createElement('div');
+      pin.className='pin'; pin.dataset.status=c.status;
+      pin.style.left = c.lng+'%'; pin.style.top = c.lat+'%'; // simpan lat/lng sbg persen posisi di peta abstrak
+      pin.style.background = statusColor(c.status);
+      pin.title = c.name+' — '+siteName(c.site_id);
+      pin.onclick = ()=>openDrawer(c.id);
+      el.appendChild(pin);
+    });
+  }
+
+  function filterMap(status, btn){
+    document.querySelectorAll('.map-toolbar .chip').forEach(c=>c.classList.remove('on'));
+    btn.classList.add('on');
+    document.querySelectorAll('.pin').forEach(p=>{
+      p.classList.toggle('hidden-pin', status!=='all' && p.dataset.status!==status);
+    });
+  }
+
+  function renderCustomerTable(filter=''){
+    const tb = document.getElementById('customers-tbody'); tb.innerHTML='';
+    const q = filter.toLowerCase();
+    customers.filter(inSite).filter(c=> !q || c.name.toLowerCase().includes(q) || c.customer_code.toLowerCase().includes(q))
+    .forEach((c)=>{
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${c.name}</td>
+        <td class="mono-cell">${c.customer_code}</td>
+        <td class="mono-cell">${siteName(c.site_id).split(' — ')[0]}</td>
+        <td><span class="badge type ${c.access_type==='OLT_GPON'?'olt':''}">${c.access_type==='OLT_GPON'?'OLT':'LAN/Hub'}</span></td>
+        <td>${c.package||'—'}</td>
+        <td><span class="badge ${statusClass(c.status)}"><span class="sw" style="background:${statusColor(c.status)}"></span>${c.status}</span></td>
+        <td class="mono-cell">${c.pppoe_username||'—'}</td>
+        <td><button class="row-link" onclick="openDrawer('${c.id}')">Lihat →</button></td>
+      `;
+      tb.appendChild(tr);
+    });
+    if(!tb.children.length){
+      tb.innerHTML = '<tr><td colspan="8" class="empty-note">Tidak ada pelanggan di server ini</td></tr>';
+    }
+  }
+  function onGlobalSearch(){ renderCustomerTable(document.getElementById('global-search').value); }
+
+  function renderTeamTable(){
+    const tb = document.getElementById('team-tbody'); tb.innerHTML='';
+    technicians.filter(inSite).forEach(t=>{
+      const cls = t.status==='Tersedia' ? 'on' : t.status==='Bertugas' ? 'iso' : 'off';
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${t.name}</td>
+        <td class="mono-cell">${siteName(t.site_id).split(' — ')[0]}</td>
+        <td><span class="badge ${cls}"><span class="sw" style="background:${cls==='on'?'var(--on)':cls==='iso'?'var(--iso)':'var(--off)'}"></span>${t.status}</span></td>
+        <td>${t.active_tickets}</td>
+      `;
+      tb.appendChild(tr);
+    });
+    if(!tb.children.length){
+      tb.innerHTML = '<tr><td colspan="4" class="empty-note">Tidak ada teknisi di server ini</td></tr>';
+    }
+  }
+
+  function renderAgents(){
+    const el = document.getElementById('agents-container'); el.innerHTML='';
+    const list = currentSite==='all' ? sites : sites.filter(s=>s.id===currentSite);
+    list.forEach(s=>{
+      const connected = s.agent_status==='terhubung';
+      const card = document.createElement('div');
+      card.className='card';
+      card.innerHTML = `
+        <div class="card-head"><h3>${s.name}</h3><span class="muted">heartbeat</span></div>
+        <div class="info-grid">
+          <div><div class="ig-label">Status</div><span class="badge ${connected?'on':'off'}"><span class="sw" style="background:${connected?'var(--on)':'var(--off)'}"></span>${connected?'Terhubung':'Terputus'}</span></div>
+          <div><div class="ig-label">Sinkron terakhir</div>${s.last_sync ? new Date(s.last_sync).toLocaleString('id-ID') : '—'}</div>
+          <div><div class="ig-label">Metode</div>${s.connection_method||'—'}</div>
+          <div><div class="ig-label">Router terhubung</div>${s.router_summary||'—'}</div>
+        </div>
+      `;
+      el.appendChild(card);
+    });
+    if(!list.length){
+      el.innerHTML = '<div class="empty-note">Belum ada server terdaftar</div>';
+    }
+  }
+
+  function renderVoucherTable(){
+    const tb = document.getElementById('voucher-tbody'); tb.innerHTML='';
+    vouchers.filter(inSite).forEach((v)=>{
+      const statusBadge = v.status==='unused' ? '<span class="badge on"><span class="sw" style="background:var(--on)"></span>Belum dipakai</span>'
+        : v.status==='used' ? '<span class="badge off"><span class="sw" style="background:var(--off)"></span>Terpakai</span>'
+        : '<span class="badge iso"><span class="sw" style="background:var(--iso)"></span>Kedaluwarsa</span>';
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td class="mono-cell">
+          <div class="cred-box" style="display:inline-flex; padding:5px 9px;">
+            <span class="cred-val ${v.revealed_code?'':'masked'}" style="min-width:110px;">${v.revealed_code ? v.revealed_code : '••••-••••'}</span>
+            <button class="icon-btn" onclick="toggleVoucher('${v.id}')" title="Lihat kode">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M1.5 12S5 5 12 5s10.5 7 10.5 7-3.5 7-10.5 7S1.5 12 1.5 12z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+          </div>
+        </td>
+        <td class="mono-cell">${siteName(v.site_id).split(' — ')[0]}</td>
+        <td>${v.package}</td>
+        <td>${statusBadge}</td>
+        <td class="mono-cell">${new Date(v.created_at).toLocaleDateString('id-ID')}</td>
+        <td></td>
+      `;
+      tb.appendChild(tr);
+    });
+    if(!tb.children.length){
+      tb.innerHTML = '<tr><td colspan="6" class="empty-note">Belum ada voucher di server ini</td></tr>';
+    }
+  }
+
+  async function toggleVoucher(id){
+    const v = vouchers.find(v=>v.id===id);
+    if(v.revealed_code){ v.revealed_code = null; renderVoucherTable(); return; }
+    const { data, error } = await sb.rpc('reveal_voucher_code', { p_voucher_id: id });
+    if(error){ showToast('Gagal membuka kode: '+error.message); return; }
+    v.revealed_code = data;
+    renderVoucherTable();
+    showToast('Kode voucher ditampilkan — tercatat di audit log');
+  }
+
+  async function generateVouchers(){
+    const pkg = document.getElementById('v-package').value.split(' — ')[0];
+    const count = Math.min(500, Math.max(1, parseInt(document.getElementById('v-count').value)||1));
+    const profileName = document.getElementById('v-profile').value;
+    const siteId = document.getElementById('v-site').value;
+
+    const { error } = await sb.rpc('create_vouchers', {
+      p_site_id: siteId, p_package: pkg, p_profile: profileName, p_count: count
+    });
+    if(error){ showToast('Gagal membuat voucher: '+error.message); return; }
+
+    const { data } = await sb.from('vouchers').select('*').order('created_at',{ascending:false});
+    vouchers = (data||[]).map(v=>({...v, revealed_code:null}));
+    renderVoucherTable();
+    showToast(`${count} voucher ${pkg} dibuat, menunggu agent memproses ke MikroTik`);
+  }
+
+  // ---------- DRAWER ----------
+  function openDrawer(customerId){
+    currentCustomerId = customerId; passRevealed = false;
+    const c = customers.find(c=>c.id===customerId);
+    if(!c) return;
+    document.getElementById('d-name').textContent = c.name;
+    document.getElementById('d-addr').textContent = c.address || '—';
+    document.getElementById('d-id').textContent = c.customer_code;
+    document.getElementById('d-site').textContent = siteName(c.site_id);
+    document.getElementById('d-package').textContent = c.package || '—';
+    document.getElementById('d-access').textContent = c.access_type==='OLT_GPON' ? 'OLT / GPON' : 'LAN / Hub';
+    document.getElementById('d-node').textContent = c.node_id || '—';
+    document.getElementById('d-username').textContent = c.pppoe_username || '—';
+    document.getElementById('d-password').textContent = '••••••••';
+    document.getElementById('d-password').classList.add('masked');
+
+    const badge = document.getElementById('d-status-badge');
+    badge.className = 'badge '+statusClass(c.status);
+    badge.querySelector('.sw').style.background = statusColor(c.status);
+    document.getElementById('d-status-text').textContent = c.status;
+
+    document.getElementById('d-toggle-status').textContent = c.status==='Isolir' ? 'Pulihkan Akses' : 'Isolir Pelanggan';
+
+    document.getElementById('drawer').classList.add('open');
+    document.getElementById('overlay').classList.add('open');
+  }
+  function closeDrawer(){
+    document.getElementById('drawer').classList.remove('open');
+    document.getElementById('overlay').classList.remove('open');
+  }
+
+  async function togglePassword(){
+    passRevealed = !passRevealed;
+    const el = document.getElementById('d-password');
+    if(passRevealed){
+      const { data, error } = await sb.rpc('reveal_pppoe_password', { p_customer_id: currentCustomerId });
+      if(error){ showToast('Gagal membuka sandi: '+error.message); passRevealed=false; return; }
+      el.textContent = data || '(belum diset)';
+      el.classList.remove('masked');
+      showToast('Sandi PPPoE ditampilkan — tercatat di audit log');
+    } else {
+      el.textContent = '••••••••';
+      el.classList.add('masked');
+    }
+  }
+  function copyPassword(){
+    const el = document.getElementById('d-password');
+    if(el.classList.contains('masked')){ showToast('Buka sandi dulu sebelum menyalin'); return; }
+    navigator.clipboard && navigator.clipboard.writeText(el.textContent).catch(()=>{});
+    showToast('Sandi disalin ke clipboard');
+  }
+  async function regenPassword(){
+    const chars='abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789';
+    let newPass=''; for(let i=0;i<10;i++) newPass+=chars[rand(0,chars.length-1)];
+    const { error } = await sb.rpc('set_pppoe_password', { p_customer_id: currentCustomerId, p_new_password: newPass });
+    if(error){ showToast('Gagal mengganti sandi: '+error.message); return; }
+    passRevealed = true;
+    const el = document.getElementById('d-password');
+    el.textContent = newPass; el.classList.remove('masked');
+    showToast('Sandi baru dibuat & dikirim ke antrean MikroTik');
+  }
+  async function toggleIsolir(){
+    const c = customers.find(c=>c.id===currentCustomerId);
+    const makeIsolir = c.status !== 'Isolir';
+    const { error } = await sb.rpc('set_customer_isolir', { p_customer_id: currentCustomerId, p_isolir: makeIsolir });
+    if(error){ showToast('Gagal mengubah status: '+error.message); return; }
+    c.status = makeIsolir ? 'Isolir' : 'Aktif';
+    openDrawer(currentCustomerId);
+    renderCustomerTable(document.getElementById('global-search').value);
+    renderPins(); renderKPIs();
+    showToast(makeIsolir ? 'Perintah isolir dikirim ke MikroTik' : 'Akses dipulihkan, perintah dikirim');
+  }
+
+  // ---------- TOAST ----------
+  function showToast(msg){
+    const el = document.createElement('div');
+    el.className='toast';
+    el.innerHTML = `<span class="sw"></span>${msg}`;
+    document.getElementById('toast-container').appendChild(el);
+    setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity .3s'; setTimeout(()=>el.remove(),300); }, 3200);
+  }
+
+  function renderAll(){
+    renderKPIs();
+    renderBars();
+    renderPins();
+    renderCustomerTable();
+    renderVoucherTable();
+    renderTeamTable();
+    renderAgents();
+  }
+
+  // ---------- INIT ----------
+  checkExistingSession();
+</script>
+
+</body>
