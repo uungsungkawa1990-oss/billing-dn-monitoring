@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Simpul — ISP Billing &amp; Monitoring</title>
+<title>NexusNOC — ISP Billing & Monitoring</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/supabase-js/2.45.4/supabase.min.js"></script>
 <script src="config.js"></script>
 <style>
@@ -326,7 +326,7 @@
         <path d="M8 13 C8 9, 18 9, 18 13 C18 17, 8 17, 8 13Z" stroke="#1e5aa8" stroke-width="1.6"/>
         <path d="M13 8 C17 8, 17 18, 13 18 C9 18, 9 8, 13 8Z" stroke="#d8722a" stroke-width="1.6"/>
       </svg>
-      <span class="name">Simpul</span>
+      <span class="name">NexusNOC</span>
     </div>
     <div class="pair-rule"></div>
     <h1>Masuk ke akun</h1>
@@ -356,7 +356,7 @@
           <path d="M8 13 C8 9, 18 9, 18 13 C18 17, 8 17, 8 13Z" stroke="#1e5aa8" stroke-width="1.6"/>
           <path d="M13 8 C17 8, 17 18, 13 18 C9 18, 9 8, 13 8Z" stroke="#d8722a" stroke-width="1.6"/>
         </svg>
-        <span class="name">Simpul</span>
+        <span class="name">NexusNOC</span>
       </div>
 
       <div class="site-switcher">
@@ -649,13 +649,22 @@
 
 <script>
   // =========================================================
-  // SIMPUL — koneksi ke Supabase (data asli, bukan contoh)
+  // NEXUSNOC — koneksi ke Supabase (data asli, bukan contoh)
   // Isi URL & anon key di config.js — JANGAN taruh di file ini.
   // =========================================================
-  const sb = window.supabase.createClient(
-    window.SIMPUL_CONFIG.supabaseUrl,
-    window.SIMPUL_CONFIG.supabaseAnonKey
-  );
+  const sb = (function(){
+    if(!window.supabase || !window.supabase.createClient){
+      const hint = document.getElementById('login-hint');
+      if(hint) hint.textContent = 'Gagal memuat library Supabase (cdnjs.cloudflare.com). Cek koneksi internet, atau coba refresh halaman.';
+      const btn = document.getElementById('login-btn');
+      if(btn) btn.disabled = true;
+      throw new Error('window.supabase belum termuat — cek script CDN supabase-js di index.html');
+    }
+    return window.supabase.createClient(
+      window.NEXUSNOC_CONFIG.supabaseUrl,
+      window.NEXUSNOC_CONFIG.supabaseAnonKey
+    );
+  })();
 
   // ---------- STATE ----------
   let profile = null;          // {id, full_name, role, site_ids}
@@ -683,11 +692,16 @@
     if(!email || !password){ hint.textContent = 'Isi email dan kata sandi.'; return; }
 
     btn.textContent = 'Memeriksa…'; btn.disabled = true;
-    const { data, error } = await sb.auth.signInWithPassword({ email, password });
-    btn.textContent = 'Masuk'; btn.disabled = false;
-
-    if(error){ hint.textContent = 'Gagal masuk: ' + error.message; return; }
-    await bootApp();
+    try {
+      const { data, error } = await sb.auth.signInWithPassword({ email, password });
+      if(error){ hint.textContent = 'Gagal masuk: ' + error.message; return; }
+      await bootApp();
+    } catch(e) {
+      hint.textContent = 'Terjadi kesalahan tak terduga: ' + (e && e.message ? e.message : String(e));
+      console.error(e);
+    } finally {
+      btn.textContent = 'Masuk'; btn.disabled = false;
+    }
   }
 
   async function doLogout(){
@@ -699,35 +713,47 @@
 
   // Kalau sesi masih aktif (reload halaman), langsung masuk ke app
   async function checkExistingSession(){
-    const { data } = await sb.auth.getSession();
-    if(data.session){ await bootApp(); }
+    try {
+      const { data } = await sb.auth.getSession();
+      if(data.session){ await bootApp(); }
+    } catch(e) {
+      console.error(e);
+      const hint = document.getElementById('login-hint');
+      if(hint) hint.textContent = 'Gagal memeriksa sesi: ' + (e && e.message ? e.message : String(e));
+    }
   }
 
   // ---------- BOOT ----------
   async function bootApp(){
-    const { data: userData } = await sb.auth.getUser();
-    if(!userData.user){ return; }
+    try {
+      const { data: userData } = await sb.auth.getUser();
+      if(!userData.user){ return; }
 
-    const { data: prof, error: profErr } = await sb.from('profiles')
-      .select('*').eq('id', userData.user.id).single();
+      const { data: prof, error: profErr } = await sb.from('profiles')
+        .select('*').eq('id', userData.user.id).single();
 
-    if(profErr || !prof){
-      document.getElementById('login-hint').textContent =
-        'Akun ini belum punya profil (role/server). Minta admin menambahkan baris di tabel profiles.';
-      await sb.auth.signOut();
-      return;
+      if(profErr || !prof){
+        document.getElementById('login-hint').textContent =
+          'Akun ini belum punya profil (role/server). Minta admin menambahkan baris di tabel profiles.';
+        await sb.auth.signOut();
+        return;
+      }
+      profile = prof;
+
+      document.getElementById('login-view').style.display='none';
+      document.getElementById('app-shell').style.display='block';
+      document.querySelector('.avatar').textContent =
+        profile.full_name.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+
+      await fetchAll();
+      populateSiteSwitcher();
+      renderAll();
+      subscribeRealtime();
+    } catch(e) {
+      console.error(e);
+      const hint = document.getElementById('login-hint');
+      if(hint) hint.textContent = 'Gagal memuat aplikasi: ' + (e && e.message ? e.message : String(e));
     }
-    profile = prof;
-
-    document.getElementById('login-view').style.display='none';
-    document.getElementById('app-shell').style.display='block';
-    document.querySelector('.avatar').textContent =
-      profile.full_name.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
-
-    await fetchAll();
-    populateSiteSwitcher();
-    renderAll();
-    subscribeRealtime();
   }
 
   // ---------- FETCH ----------
