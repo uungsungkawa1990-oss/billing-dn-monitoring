@@ -439,7 +439,7 @@
           <div class="kpi">
             <div class="lbl">Pendapatan · Bulan Ini</div>
             <div class="num" id="kpi-revenue">—</div>
-            <div class="delta">↑ 4.2% dari bulan lalu</div>
+            <div class="delta" id="kpi-revenue-sub">—</div>
           </div>
         </div>
 
@@ -456,13 +456,8 @@
               <h3>Aktivitas Terbaru</h3>
               <span class="muted">live</span>
             </div>
-            <div class="feed">
-              <div class="feed-row alert"><span class="dot" style="background:var(--off)"></span><span class="who">⚠ Gangguan massal — ODP-14 (12 pelanggan)</span><span class="when">2 mnt</span></div>
-              <div class="feed-row"><span class="dot" style="background:var(--off)"></span><span class="who">Budi Santoso — offline</span><span class="when">3 mnt</span></div>
-              <div class="feed-row"><span class="dot" style="background:var(--iso)"></span><span class="who">Ahmad Fauzi — jatuh tempo H+3</span><span class="when">14 mnt</span></div>
-              <div class="feed-row"><span class="dot" style="background:var(--on)"></span><span class="who">Toko Jaya Makmur — kembali online</span><span class="when">22 mnt</span></div>
-              <div class="feed-row"><span class="dot" style="background:var(--wire-blue)"></span><span class="who">Voucher HOTSPOT-2H dibuat ×50</span><span class="when">41 mnt</span></div>
-              <div class="feed-row"><span class="dot" style="background:var(--on)"></span><span class="who">Rina Wulandari — pembayaran diterima</span><span class="when">1 jam</span></div>
+            <div class="feed" id="activity-feed">
+              <div class="feed-row"><span class="who muted">Memuat aktivitas…</span></div>
             </div>
           </div>
         </div>
@@ -668,6 +663,9 @@
   let customers = [];
   let technicians = [];
   let vouchers = [];
+  let invoices = [];
+  let connectionLogs = [];
+  let tickets = [];
   let currentSite = 'all';
   let currentCustomerId = null;
   let passRevealed = false;
@@ -734,18 +732,28 @@
 
   // ---------- FETCH ----------
   async function fetchAll(){
-    const [sRes, cRes, tRes, vRes] = await Promise.all([
+    const since24h = new Date(Date.now() - 24*3600*1000).toISOString();
+    const [sRes, cRes, tRes, vRes, invRes, logRes, tkRes] = await Promise.all([
       sb.from('sites').select('*').order('name'),
       sb.from('customers').select('*').order('name'),
       sb.from('technicians').select('*').order('name'),
-      sb.from('vouchers').select('*').order('created_at', {ascending:false})
+      sb.from('vouchers').select('*').order('created_at', {ascending:false}),
+      sb.from('invoices').select('*').order('created_at', {ascending:false}).limit(1000),
+      sb.from('connection_logs').select('*').gte('logged_at', since24h).order('logged_at', {ascending:false}).limit(1000),
+      sb.from('tickets').select('*').order('created_at', {ascending:false}).limit(50)
     ]);
     sites = sRes.data || [];
     customers = cRes.data || [];
     technicians = tRes.data || [];
     vouchers = (vRes.data || []).map(v=>({...v, revealed_code:null}));
+    invoices = invRes.data || [];
+    connectionLogs = logRes.data || [];
+    tickets = tkRes.data || [];
     if(sRes.error) console.error(sRes.error);
     if(cRes.error) console.error(cRes.error);
+    if(invRes.error) console.error(invRes.error);
+    if(logRes.error) console.error(logRes.error);
+    if(tkRes.error) console.error(tkRes.error);
   }
 
   function populateSiteSwitcher(){
@@ -772,6 +780,19 @@
       .on('postgres_changes', {event:'*', schema:'public', table:'sites'}, async ()=>{
         const { data } = await sb.from('sites').select('*').order('name');
         sites = data || []; renderAgents();
+      })
+      .on('postgres_changes', {event:'*', schema:'public', table:'invoices'}, async ()=>{
+        const { data } = await sb.from('invoices').select('*').order('created_at',{ascending:false}).limit(1000);
+        invoices = data || []; renderKPIs(); renderActivityFeed();
+      })
+      .on('postgres_changes', {event:'*', schema:'public', table:'tickets'}, async ()=>{
+        const { data } = await sb.from('tickets').select('*').order('created_at',{ascending:false}).limit(50);
+        tickets = data || []; renderActivityFeed();
+      })
+      .on('postgres_changes', {event:'*', schema:'public', table:'connection_logs'}, async ()=>{
+        const since24h = new Date(Date.now() - 24*3600*1000).toISOString();
+        const { data } = await sb.from('connection_logs').select('*').gte('logged_at', since24h).order('logged_at',{ascending:false}).limit(1000);
+        connectionLogs = data || []; renderBars(); renderActivityFeed();
       })
       .subscribe();
   }
@@ -801,6 +822,14 @@
   function statusColor(s){ return s==='Aktif' ? 'var(--on)' : s==='Offline' ? 'var(--off)' : 'var(--iso)'; }
   function statusClass(s){ return s==='Aktif' ? 'on' : s==='Offline' ? 'off' : 'iso'; }
 
+  function currentPeriod(offsetMonths){
+    const d = new Date(); d.setMonth(d.getMonth()+offsetMonths);
+    return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+  }
+  function formatIDR(n){
+    return 'Rp' + Math.round(n).toLocaleString('id-ID');
+  }
+
   function renderKPIs(){
     const list = customers.filter(inSite);
     const online = list.filter(c=>c.status==='Aktif').length;
@@ -811,20 +840,60 @@
     document.getElementById('kpi-offline').textContent = offline;
     document.getElementById('kpi-isolir').textContent = isolir;
     document.getElementById('kpi-isolir-sub').textContent = isolir>0 ? isolir+' pelanggan tertunggak' : 'tidak ada tunggakan';
-    document.getElementById('kpi-revenue').textContent = '—'; // hubungkan ke tabel invoices bila sudah ada data
+
+    // Pendapatan: jumlahkan invoices.amount berstatus 'paid' milik pelanggan di site aktif,
+    // dibandingkan bulan berjalan vs bulan sebelumnya (semua diambil dari tabel invoices, bukan angka contoh).
+    const idSet = new Set(list.map(c=>c.id));
+    const thisPeriod = currentPeriod(0);
+    const lastPeriod = currentPeriod(-1);
+    const sumFor = (period)=> invoices
+      .filter(inv => idSet.has(inv.customer_id) && inv.period===period && inv.status==='paid')
+      .reduce((sum, inv)=> sum + Number(inv.amount||0), 0);
+    const thisRevenue = sumFor(thisPeriod);
+    const lastRevenue = sumFor(lastPeriod);
+
+    document.getElementById('kpi-revenue').textContent = formatIDR(thisRevenue);
+    const deltaEl = document.getElementById('kpi-revenue-sub');
+    if(lastRevenue > 0){
+      const pct = ((thisRevenue - lastRevenue) / lastRevenue) * 100;
+      const arrow = pct >= 0 ? '↑' : '↓';
+      deltaEl.textContent = arrow + ' ' + Math.abs(pct).toFixed(1) + '% dari bulan lalu';
+    } else {
+      deltaEl.textContent = thisRevenue > 0 ? 'belum ada data bulan lalu' : 'belum ada pembayaran bulan ini';
+    }
   }
 
-  // Catatan: grafik ini butuh agregasi per jam dari tabel connection_logs.
-  // Ditampilkan sederhana dulu; ganti dengan query agregat saat data histori tersedia.
+  // Agregasi nyata dari connection_logs (24 jam terakhir, per 3 jam).
+  // Untuk tiap titik waktu, ambil status TERAKHIR yang tercatat per pelanggan
+  // pada atau sebelum titik itu, lalu hitung rasio Aktif dari pelanggan yang sudah punya histori.
   function renderBars(){
     const el = document.getElementById('bar-chart'); el.innerHTML='';
-    const hours = ['00','03','06','09','12','15','18','21'];
     const list = customers.filter(inSite);
-    const base = list.length ? Math.round(list.filter(c=>c.status==='Aktif').length / list.length * 100) : 0;
-    hours.forEach(h=>{
-      const pct = Math.max(10, Math.min(100, base + rand(-8,8)));
+    const idSet = new Set(list.map(c=>c.id));
+    const logs = connectionLogs
+      .filter(l=>idSet.has(l.customer_id))
+      .slice()
+      .sort((a,b)=> new Date(a.logged_at) - new Date(b.logged_at));
+
+    const now = new Date();
+    const points = [];
+    for(let i=7;i>=0;i--) points.push(new Date(now.getTime() - i*3*3600*1000));
+
+    // pointer per-customer maju seiring waktu supaya tidak O(n^2) penuh
+    const lastKnown = {}; // customer_id -> status
+    let cursor = 0;
+
+    points.forEach(t=>{
+      while(cursor < logs.length && new Date(logs[cursor].logged_at) <= t){
+        lastKnown[logs[cursor].customer_id] = logs[cursor].status;
+        cursor++;
+      }
+      const known = Object.keys(lastKnown).filter(id=>idSet.has(id));
+      const onlineCount = known.filter(id=>lastKnown[id]==='Aktif').length;
+      const pct = known.length ? Math.round(onlineCount/known.length*100) : 0;
       const wrap = document.createElement('div'); wrap.className='bar-wrap';
-      wrap.innerHTML = `<div class="bar" style="height:${pct}%"></div><span class="bl">${h}</span>`;
+      const label = String(t.getHours()).padStart(2,'0');
+      wrap.innerHTML = `<div class="bar" style="height:${Math.max(pct,2)}%"></div><span class="bl">${label}</span>`;
       el.appendChild(wrap);
     });
   }
@@ -1054,9 +1123,67 @@
     setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity .3s'; setTimeout(()=>el.remove(),300); }, 3200);
   }
 
+  function timeAgo(dateStr){
+    const diffMs = Date.now() - new Date(dateStr).getTime();
+    const mins = Math.floor(diffMs/60000);
+    if(mins < 1) return 'baru saja';
+    if(mins < 60) return mins+' mnt';
+    const hours = Math.floor(mins/60);
+    if(hours < 24) return hours+' jam';
+    return Math.floor(hours/24)+' hari';
+  }
+  function customerName(id){ const c = customers.find(c=>c.id===id); return c ? c.name : 'Pelanggan'; }
+
+  // Feed ini dirakit dari data nyata (connection_logs, invoices, vouchers, tickets)
+  // yang sudah dibatasi ke site aktif via inSite() — tidak ada lagi contoh statis.
+  function renderActivityFeed(){
+    const el = document.getElementById('activity-feed'); if(!el) return;
+    const list = customers.filter(inSite);
+    const idSet = new Set(list.map(c=>c.id));
+    const events = [];
+
+    connectionLogs.filter(l=>idSet.has(l.customer_id)).forEach(l=>{
+      const label = l.status==='Aktif' ? 'kembali online' : l.status==='Offline' ? 'offline' : l.status.toLowerCase();
+      events.push({
+        time: l.logged_at,
+        color: l.status==='Aktif' ? 'var(--on)' : l.status==='Isolir' ? 'var(--iso)' : 'var(--off)',
+        text: customerName(l.customer_id) + ' — ' + label,
+        alert: false
+      });
+    });
+
+    invoices.filter(inv=>idSet.has(inv.customer_id) && inv.status==='paid' && inv.paid_at).forEach(inv=>{
+      events.push({ time: inv.paid_at, color: 'var(--on)', text: customerName(inv.customer_id) + ' — pembayaran diterima', alert: false });
+    });
+
+    const voucherBatches = {};
+    vouchers.filter(inSite).forEach(v=>{
+      const minuteKey = v.created_at ? v.created_at.slice(0,16) : 'unknown';
+      const key = [v.site_id, v.package, v.created_by, minuteKey].join('|');
+      if(!voucherBatches[key]) voucherBatches[key] = { count:0, time:v.created_at, package:v.package };
+      voucherBatches[key].count++;
+    });
+    Object.values(voucherBatches).forEach(b=>{
+      events.push({ time: b.time, color: 'var(--wire-blue)', text: 'Voucher ' + b.package + ' dibuat ×' + b.count, alert: false });
+    });
+
+    tickets.filter(inSite).filter(t=>t.status==='open').forEach(t=>{
+      const label = t.ticket_type==='massal' ? '⚠ Gangguan massal' : '⚠ Gangguan — ' + customerName(t.customer_id);
+      events.push({ time: t.created_at, color: 'var(--off)', text: label, alert: true });
+    });
+
+    events.sort((a,b)=> new Date(b.time) - new Date(a.time));
+    const top = events.slice(0, 8);
+
+    el.innerHTML = top.length
+      ? top.map(e => `<div class="feed-row${e.alert?' alert':''}"><span class="dot" style="background:${e.color}"></span><span class="who">${e.text}</span><span class="when">${timeAgo(e.time)}</span></div>`).join('')
+      : '<div class="feed-row"><span class="who muted">Belum ada aktivitas tercatat.</span></div>';
+  }
+
   function renderAll(){
     renderKPIs();
     renderBars();
+    renderActivityFeed();
     renderPins();
     renderCustomerTable();
     renderVoucherTable();
