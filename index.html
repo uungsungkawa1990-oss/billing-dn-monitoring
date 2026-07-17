@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>NexusNOC — ISP Billing & Monitoring</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/supabase-js/2.45.4/supabase.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="config.js"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
@@ -655,7 +655,7 @@
   const sb = (function(){
     if(!window.supabase || !window.supabase.createClient){
       const hint = document.getElementById('login-hint');
-      if(hint) hint.textContent = 'Gagal memuat library Supabase (cdnjs.cloudflare.com). Cek koneksi internet, atau coba refresh halaman.';
+      if(hint) hint.textContent = 'Gagal memuat library Supabase (cdn.jsdelivr.net). Cek koneksi internet, atau coba refresh halaman.';
       const btn = document.getElementById('login-btn');
       if(btn) btn.disabled = true;
       throw new Error('window.supabase belum termuat — cek script CDN supabase-js di index.html');
