@@ -13,6 +13,6 @@
 // mana pun pada kode frontend.
 // =========================================================
 window.SIMPUL_CONFIG = {
-  supabaseUrl: "https://xxxxxxxxxxxxx.supabase.co",
-  supabaseAnonKey: "eyJhbGciOi....(anon-public-key-anda)"
+  supabaseUrl: https://hrxprochykrbzbvuauyy.supabase.co,
+  supabaseAnonKey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhyeHByb2NoeWtyYnpidnVhdXl5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQyMzIyNDEsImV4cCI6MjA5OTgwODI0MX0.I4I_G_YG1ZrmIZ-lNnEgVPQTKkfpxiE17cvhryR97UU
 };
