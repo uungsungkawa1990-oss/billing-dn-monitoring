@@ -136,8 +136,10 @@
   .topbar{
     height:58px; border-bottom:1px solid var(--line); background:var(--surface);
     display:flex; align-items:center; justify-content:space-between; padding:0 24px; flex-shrink:0;
+    gap:10px; position:sticky; top:0; z-index:30;
   }
   .topbar .title{ font-family:var(--display); font-weight:600; font-size:16px; }
+  .topbar-left{ display:flex; align-items:center; min-width:0; }
   .topbar-right{ display:flex; align-items:center; gap:14px; }
   .search-box{
     display:flex; align-items:center; gap:7px; background:var(--surface-2); border-radius:20px;
@@ -148,7 +150,26 @@
   .avatar{
     width:30px; height:30px; border-radius:50%; background:var(--ink); color:#fff;
     display:flex; align-items:center; justify-content:center; font-family:var(--display); font-size:12px; font-weight:700;
+    flex-shrink:0;
   }
+
+  /* ============ HAMBURGER / MOBILE SIDEBAR ============ */
+  .hamburger-btn{
+    display:none; background:none; border:none; padding:6px; margin-right:6px; border-radius:6px;
+    color:var(--ink); flex-shrink:0; align-items:center; justify-content:center;
+  }
+  .hamburger-btn:hover{ background:var(--surface-2); }
+  .hamburger-btn svg{ width:22px; height:22px; }
+  .sidebar-overlay{
+    position:fixed; inset:0; background:rgba(20,23,28,0.35); opacity:0; pointer-events:none;
+    transition:opacity .2s ease; z-index:44;
+  }
+  .sidebar-overlay.open{ opacity:1; pointer-events:auto; }
+
+  /* Search box collapses into an icon-triggered overlay on narrow screens */
+  .search-toggle-btn{ display:none; background:none; border:none; color:var(--ink-2); padding:6px; border-radius:6px; }
+  .search-toggle-btn svg{ width:18px; height:18px; }
+  .search-toggle-btn:hover{ background:var(--surface-2); }
 
   .page{ display:none; padding: 26px 28px 60px; flex:1; }
   .page.active{ display:block; animation: fadein .25s ease; }
@@ -305,13 +326,118 @@
 
   .empty-note{ font-size:12px; color:var(--ink-3); text-align:center; padding:26px; font-family:var(--mono); }
 
+  /* ============ DEVICE MANAGER PAGE ============ */
+  .device-toolbar{ display:flex; gap:10px; margin-bottom:16px; flex-wrap:wrap; align-items:center; justify-content:space-between; }
+  .device-toolbar .hint{ font-size:11.5px; color:var(--ink-3); font-family:var(--mono); }
+
+  /* ---- Topology diagram (SVG) ---- */
+  .topology-wrap{ display:flex; flex-direction:column; gap:16px; }
+  .topo-site-block{ background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-m); box-shadow:var(--shadow-1); overflow:hidden; }
+  .topo-site-block .dsg-head{
+    padding:12px 16px; background:var(--surface-2); border-bottom:1px solid var(--line);
+    font-family:var(--display); font-weight:600; font-size:13.5px; display:flex; align-items:center; justify-content:space-between;
+  }
+  .topo-site-block .dsg-head .muted{ font-family:var(--mono); font-weight:500; font-size:11px; color:var(--ink-3); }
+  .topo-scroll{ overflow-x:auto; padding:20px; }
+  .topo-node-box{ cursor:pointer; }
+  .topo-node-box rect{ fill:var(--surface); stroke:var(--line-2); stroke-width:1.2; transition:stroke .12s ease; }
+  .topo-node-box:hover rect{ stroke:var(--wire-blue); }
+  .topo-node-box.type-olt rect, .topo-node-box.type-splitter rect{ fill:var(--wire-orange-soft); }
+  .topo-node-box.type-router rect, .topo-node-box.type-hub rect{ fill:var(--wire-blue-soft); }
+  .topo-node-box text.topo-title{ font-family:var(--body); font-size:11px; font-weight:600; fill:var(--ink); }
+  .topo-node-box text.topo-sub{ font-family:var(--mono); font-size:9.5px; fill:var(--ink-3); }
+  .topo-link{ stroke:var(--line-2); stroke-width:1.6; fill:none; }
+  .topo-node-box.health-ok rect{ stroke:var(--on); stroke-width:1.8; }
+  .topo-node-box.health-warn rect{ stroke:var(--iso); stroke-width:2; }
+  .topo-node-box.health-bad rect{ stroke:var(--off); stroke-width:2; }
+  .topo-node-box.dim{ opacity:.3; }
+  .device-tree{ display:flex; flex-direction:column; gap:10px; }
+  .device-site-group{ background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-m); box-shadow:var(--shadow-1); overflow:hidden; }
+  .device-site-group .dsg-head{
+    padding:12px 16px; background:var(--surface-2); border-bottom:1px solid var(--line);
+    font-family:var(--display); font-weight:600; font-size:13.5px; display:flex; align-items:center; justify-content:space-between;
+  }
+  .device-site-group .dsg-head .muted{ font-family:var(--mono); font-weight:500; font-size:11px; color:var(--ink-3); }
+  .device-node-list{ padding:8px; display:flex; flex-direction:column; gap:6px; }
+  .device-node{
+    display:flex; align-items:center; gap:10px; padding:9px 10px; border-radius:var(--radius-s);
+    border:1px solid var(--line); background:var(--surface);
+  }
+  .device-node:hover{ border-color:var(--line-2); }
+  .device-node .dn-icon{
+    width:30px; height:30px; border-radius:8px; display:flex; align-items:center; justify-content:center;
+    flex-shrink:0; background:var(--wire-blue-soft); color:var(--wire-blue);
+  }
+  .device-node .dn-icon svg{ width:16px; height:16px; }
+  .device-node.type-olt .dn-icon, .device-node.type-splitter .dn-icon{ background:var(--wire-orange-soft); color:var(--wire-orange); }
+  .device-node .dn-main{ flex:1; min-width:0; }
+  .device-node .dn-name{ font-weight:600; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .device-node .dn-meta{ font-size:11px; color:var(--ink-3); font-family:var(--mono); display:flex; gap:8px; flex-wrap:wrap; margin-top:2px; }
+  .device-node .dn-actions{ display:flex; gap:2px; flex-shrink:0; }
+  .device-children{ margin-left:22px; padding-left:12px; border-left:2px dashed var(--line-2); display:flex; flex-direction:column; gap:6px; margin-top:6px; }
+  .device-depth-wrap{ display:flex; flex-direction:column; }
+
+  .modal-overlay{
+    position:fixed; inset:0; background:rgba(20,23,28,0.35); opacity:0; pointer-events:none;
+    display:flex; align-items:center; justify-content:center; transition:opacity .18s ease; z-index:50; padding:16px;
+  }
+  .modal-overlay.open{ opacity:1; pointer-events:auto; }
+  .modal-box{
+    width:100%; max-width:420px; background:var(--surface); border-radius:var(--radius-m); box-shadow:var(--shadow-2);
+    max-height:90vh; overflow-y:auto;
+  }
+  .modal-head{ padding:18px 20px 12px; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; align-items:flex-start; }
+  .modal-head h3{ font-family:var(--display); font-size:16px; font-weight:600; margin:0; }
+  .modal-body{ padding:18px 20px; display:flex; flex-direction:column; gap:14px; }
+  .modal-body select{
+    width:100%; padding:10px 12px; border:1px solid var(--line-2); border-radius:var(--radius-s);
+    font-size:13.5px; background:var(--surface); color:var(--ink);
+  }
+  .modal-actions{ display:flex; gap:8px; padding:14px 20px 20px; }
+  .modal-actions .btn{ flex:1; }
+
+  /* ============ RESPONSIVE / MOBILE-DESKTOP ============ */
   @media (max-width: 900px){
     .shell{ grid-template-columns:1fr; }
-    .sidebar{ display:none; }
+    .hamburger-btn{ display:inline-flex; }
+    .sidebar{
+      display:flex; position:fixed; top:0; left:0; height:100vh; width:250px; z-index:45;
+      transform:translateX(-100%); transition:transform .22s ease; box-shadow:var(--shadow-2);
+    }
+    .sidebar.open{ transform:translateX(0); }
     .kpi-row{ grid-template-columns:repeat(2,1fr); }
     .grid-2{ grid-template-columns:1fr; }
     .drawer{ width:100%; }
     .voucher-form{ grid-template-columns:1fr; }
+    .topbar{ padding:0 12px; }
+    .topbar-site{ display:none; }
+    .search-box{ display:none; }
+    .search-toggle-btn{ display:inline-flex; }
+    .page{ padding:18px 14px 60px; }
+
+    /* Tables become stacked cards */
+    .table-wrap table thead{ display:none; }
+    .table-wrap table, .table-wrap tbody, .table-wrap tr, .table-wrap td{ display:block; width:100%; }
+    .table-wrap tr{
+      border-bottom:1px solid var(--line); padding:10px 14px; display:flex; flex-direction:column; gap:6px;
+    }
+    .table-wrap tr:hover{ background:none; }
+    .table-wrap td{
+      border-bottom:none; padding:0; display:flex; align-items:center; justify-content:space-between; gap:10px;
+    }
+    .table-wrap td:empty{ display:none; }
+    .table-wrap td[data-label]::before{
+      content: attr(data-label); font-size:10.5px; color:var(--ink-3); font-weight:600; text-transform:uppercase;
+      letter-spacing:.3px; flex-shrink:0;
+    }
+    .device-children{ margin-left:12px; padding-left:8px; }
+  }
+
+  @media (max-width: 480px){
+    .kpi-row{ grid-template-columns:1fr 1fr; gap:10px; }
+    .kpi{ padding:12px 14px; }
+    .kpi .num{ font-size:21px; }
+    .modal-box{ max-width:100%; }
   }
 </style>
 </head>
@@ -367,18 +493,48 @@
       </div>
 
       <nav class="nav-group">
+        <!-- Urutan mengikuti daftar 18 modul tetap (constitution-aligned). Modul yang belum ada halamannya (Billing, Network Topology, Inventory, Work Order, Finance, Reports, User & Role, Notification, Integration, GenieACS, AI Automation) belum ditambahkan ke sidebar — lihat laporan.md. -->
         <button class="nav-item active" data-page="dashboard" onclick="goPage('dashboard')">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="5" rx="1.5"/><rect x="13" y="10" width="8" height="11" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/></svg>
           Dashboard
-        </button>
-        <button class="nav-item" data-page="map" onclick="goPage('map')">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 21s7-6.5 7-12a7 7 0 10-14 0c0 5.5 7 12 7 12z"/><circle cx="12" cy="9" r="2.3"/></svg>
-          Peta Pelanggan
         </button>
         <button class="nav-item" data-page="customers" onclick="goPage('customers')">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.5 2.7-6 6-6s6 2.5 6 6"/><circle cx="17" cy="8" r="2.6"/><path d="M15.5 14.3c2.6.4 4.5 2.6 4.5 5.7"/></svg>
           Pelanggan
         </button>
+        <button class="nav-item" data-page="billing" onclick="goPage('billing')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18"/><path d="M7 15h4"/></svg>
+          Billing
+        </button>
+        <button class="nav-item" data-page="devices" onclick="goPage('devices')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="4" y="4" width="16" height="7" rx="1.5"/><rect x="4" y="14" width="16" height="6" rx="1.5"/><circle cx="8" cy="7.5" r="1"/><circle cx="8" cy="17" r="1"/></svg>
+          Perangkat
+        </button>
+        <button class="nav-item" data-page="topology" onclick="goPage('topology')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/><path d="M12 7v5M12 12l-6 5M12 12l6 5"/></svg>
+          Topologi Jaringan
+        </button>
+        <button class="nav-item" data-page="map" onclick="goPage('map')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 21s7-6.5 7-12a7 7 0 10-14 0c0 5.5 7 12 7 12z"/><circle cx="12" cy="9" r="2.3"/></svg>
+          Peta Pelanggan
+        </button>
+        <button class="nav-item" data-page="mikrotik" onclick="goPage('mikrotik')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 10c4.5-4 11.5-4 16 0M7 13.5c2.8-2.5 6.2-2.5 9 0M10 17c1-1 3-1 4 0"/><circle cx="12" cy="20" r="1"/></svg>
+          Monitoring MikroTik
+        </button>
+        <button class="nav-item" data-page="inventory" onclick="goPage('inventory')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 7v10l9 4 9-4V7"/><path d="M12 11v10"/></svg>
+          Inventory
+        </button>
+        <button class="nav-item" data-page="tickets" onclick="goPage('tickets')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 5h16v10H8l-4 4V5z"/><path d="M8 9h8M8 12h5"/></svg>
+          CRM &amp; Tiket
+        </button>
+        <button class="nav-item" data-page="settings" onclick="goPage('settings')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="3"/><path d="M19.4 13a1.7 1.7 0 00.3 1.9l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.9-.3 1.7 1.7 0 00-1 1.6V19a2 2 0 11-4 0v-.2a1.7 1.7 0 00-1-1.5 1.7 1.7 0 00-1.9.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.9 1.7 1.7 0 00-1.6-1H4a2 2 0 110-4h.2a1.7 1.7 0 001.5-1 1.7 1.7 0 00-.3-1.9l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.9.3H10a1.7 1.7 0 001-1.6V4a2 2 0 114 0v.2a1.7 1.7 0 001 1.6 1.7 1.7 0 001.9-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.9V10a1.7 1.7 0 001.6 1H20a2 2 0 110 4h-.2a1.7 1.7 0 00-1.6 1z"/></svg>
+          Pengaturan
+        </button>
+        <!-- Modul di bawah ini (Tim Teknisi, Voucher) berfungsi dan sudah ada di kode, tapi tidak termasuk dalam daftar 18 modul tetap -> ditempatkan paling bawah, tidak dihapus -->
         <button class="nav-item" data-page="team" onclick="goPage('team')">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M14.7 6.3a2.4 2.4 0 11-3.4 3.4L4 17v3h3l7.3-7.3"/><path d="M17.5 3.5l3 3-2 2-3-3z"/></svg>
           Tim Teknisi
@@ -387,28 +543,33 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 8a2 2 0 012-2h14a2 2 0 012 2v2a2 2 0 000 4v2a2 2 0 01-2 2H5a2 2 0 01-2-2v-2a2 2 0 000-4V8z"/><path d="M9 6v12" stroke-dasharray="2 2"/></svg>
           Voucher
         </button>
-        <button class="nav-item" data-page="settings" onclick="goPage('settings')">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="3"/><path d="M19.4 13a1.7 1.7 0 00.3 1.9l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.9-.3 1.7 1.7 0 00-1 1.6V19a2 2 0 11-4 0v-.2a1.7 1.7 0 00-1-1.5 1.7 1.7 0 00-1.9.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.9 1.7 1.7 0 00-1.6-1H4a2 2 0 110-4h.2a1.7 1.7 0 001.5-1 1.7 1.7 0 00-.3-1.9l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.9.3H10a1.7 1.7 0 001-1.6V4a2 2 0 114 0v.2a1.7 1.7 0 001 1.6 1.7 1.7 0 001.9-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.9V10a1.7 1.7 0 001.6 1H20a2 2 0 110 4h-.2a1.7 1.7 0 00-1.6 1z"/></svg>
-          Pengaturan
-        </button>
       </nav>
       <div class="sidebar-bottom">
         <div class="agent-badge"><span class="dot"></span> AGENT-LOKAL AKTIF</div>
       </div>
     </aside>
 
+    <!-- MOBILE SIDEBAR OVERLAY -->
+    <div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
+
     <!-- MAIN -->
     <div class="main">
       <div class="topbar">
-        <div style="display:flex; align-items:center;">
+        <div class="topbar-left">
+          <button class="hamburger-btn" onclick="toggleSidebar()" aria-label="Buka menu">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+          </button>
           <div class="title" id="topbar-title">Dashboard</div>
           <span class="topbar-site" id="topbar-site-badge">Semua Server</span>
         </div>
         <div class="topbar-right">
-          <div class="search-box">
+          <div class="search-box" id="search-box">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
             <input type="text" placeholder="Cari pelanggan, ID, voucher…" id="global-search" oninput="onGlobalSearch()">
           </div>
+          <button class="search-toggle-btn" onclick="toggleMobileSearch()" aria-label="Cari">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+          </button>
           <div class="avatar">RA</div>
         </div>
       </div>
@@ -506,6 +667,218 @@
         </div>
       </div>
 
+      <!-- PAGE: BILLING -->
+      <div class="page" id="page-billing">
+        <div class="page-head">
+          <h2>Billing</h2>
+          <p>Tagihan pelanggan per periode, status pembayaran, dan riwayat invoice — dari tabel <span class="mono-cell">invoices</span>.</p>
+        </div>
+
+        <div class="kpi-row">
+          <div class="kpi">
+            <div class="lbl"><span class="sw" style="background:var(--on)"></span>Lunas · Bulan Ini</div>
+            <div class="num" id="bl-kpi-paid">—</div>
+            <div class="delta" id="bl-kpi-paid-sub">—</div>
+          </div>
+          <div class="kpi">
+            <div class="lbl"><span class="sw" style="background:var(--iso)"></span>Belum Dibayar</div>
+            <div class="num" id="bl-kpi-unpaid">—</div>
+            <div class="delta">invoice bulan berjalan</div>
+          </div>
+          <div class="kpi">
+            <div class="lbl"><span class="sw" style="background:var(--off)"></span>Menunggak</div>
+            <div class="num" id="bl-kpi-overdue">—</div>
+            <div class="delta">invoice status overdue</div>
+          </div>
+          <div class="kpi">
+            <div class="lbl">Pelanggan Menunggak</div>
+            <div class="num" id="bl-kpi-overdue-customers">—</div>
+            <div class="delta">butuh tindak lanjut</div>
+          </div>
+        </div>
+
+        <div class="device-toolbar">
+          <button class="btn btn-primary" style="width:auto; padding:9px 16px;" onclick="openInvoiceModal()">+ Buat Invoice</button>
+          <div style="display:flex; gap:6px; flex-wrap:wrap;">
+            <button class="chip on" data-bl-filter="all" onclick="filterBilling('all', this)">Semua</button>
+            <button class="chip" data-bl-filter="unpaid" onclick="filterBilling('unpaid', this)"><span class="sw" style="background:var(--iso)"></span>Belum Dibayar</button>
+            <button class="chip" data-bl-filter="paid" onclick="filterBilling('paid', this)"><span class="sw" style="background:var(--on)"></span>Lunas</button>
+            <button class="chip" data-bl-filter="overdue" onclick="filterBilling('overdue', this)"><span class="sw" style="background:var(--off)"></span>Menunggak</button>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Pelanggan</th><th>Server</th><th>Periode</th><th>Jumlah</th><th>Status</th><th>Dibuat</th><th></th></tr>
+            </thead>
+            <tbody id="billing-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- PAGE: DEVICES -->
+      <div class="page" id="page-devices">
+        <div class="page-head">
+          <h2>Manajemen Perangkat</h2>
+          <p>Topologi jaringan per server — router, hub, OLT, dan splitter, tersusun sesuai hubungan induk/anak (parent_id).</p>
+        </div>
+        <div class="device-toolbar">
+          <button class="btn btn-primary" style="width:auto; padding:9px 16px;" onclick="openDeviceModal('create')">+ Tambah Perangkat</button>
+          <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+            <span class="hint" id="device-count-hint">—</span>
+            <div style="display:flex; gap:6px;">
+              <button class="chip on" data-view="list" onclick="switchDeviceView('list', this)">Daftar</button>
+              <button class="chip" data-view="topology" onclick="switchDeviceView('topology', this)">Topologi</button>
+            </div>
+          </div>
+        </div>
+        <div class="device-tree" id="devices-tree">
+          <div class="empty-note">Memuat perangkat…</div>
+        </div>
+        <div class="topology-wrap" id="devices-topology" style="display:none;"></div>
+      </div>
+
+      <!-- PAGE: NETWORK TOPOLOGY -->
+      <div class="page" id="page-topology">
+        <div class="page-head">
+          <h2>Topologi Jaringan</h2>
+          <p>Peta struktur jaringan per server dengan status kesehatan live dari koneksi pelanggan — untuk mengubah perangkat, gunakan halaman Manajemen Perangkat.</p>
+        </div>
+
+        <div class="kpi-row">
+          <div class="kpi">
+            <div class="lbl">Total Node</div>
+            <div class="num" id="nt-kpi-total">—</div>
+            <div class="delta">router / hub / OLT / splitter</div>
+          </div>
+          <div class="kpi">
+            <div class="lbl"><span class="sw" style="background:var(--off)"></span>Node Bermasalah</div>
+            <div class="num" id="nt-kpi-problem">—</div>
+            <div class="delta">ada pelanggan offline/isolir</div>
+          </div>
+          <div class="kpi">
+            <div class="lbl"><span class="sw" style="background:var(--on)"></span>Pelanggan Terhubung</div>
+            <div class="num" id="nt-kpi-connected">—</div>
+            <div class="delta">terpasang ke node manapun</div>
+          </div>
+          <div class="kpi">
+            <div class="lbl">Rata-rata Sinyal</div>
+            <div class="num" id="nt-kpi-signal">—</div>
+            <div class="delta">dBm, 24 jam terakhir</div>
+          </div>
+        </div>
+
+        <div class="device-toolbar">
+          <div style="display:flex; gap:6px; flex-wrap:wrap;">
+            <button class="chip on" data-nt-filter="all" onclick="filterTopology('all', this)">Semua Node</button>
+            <button class="chip" data-nt-filter="problem" onclick="filterTopology('problem', this)"><span class="sw" style="background:var(--off)"></span>Bermasalah Saja</button>
+          </div>
+          <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+            <span class="hint" style="display:flex; align-items:center; gap:6px;"><span class="sw" style="background:var(--on)"></span>Sehat</span>
+            <span class="hint" style="display:flex; align-items:center; gap:6px;"><span class="sw" style="background:var(--iso)"></span>Sebagian Bermasalah</span>
+            <span class="hint" style="display:flex; align-items:center; gap:6px;"><span class="sw" style="background:var(--off)"></span>Mayoritas Offline</span>
+          </div>
+        </div>
+
+        <div class="topology-wrap" id="network-topology-diagram">
+          <div class="empty-note">Memuat topologi…</div>
+        </div>
+      </div>
+
+      <!-- PAGE: MIKROTIK MONITORING -->
+      <div class="page" id="page-mikrotik">
+        <div class="page-head">
+          <h2>Monitoring MikroTik</h2>
+          <p>Status agent lokal per server &amp; antrean perintah (<span class="mono-cell">mikrotik_commands</span>) yang menunggu/sudah diproses agent.</p>
+        </div>
+
+        <div class="kpi-row">
+          <div class="kpi">
+            <div class="lbl"><span class="sw" style="background:var(--iso)"></span>Antrian Pending</div>
+            <div class="num" id="mk-kpi-pending">—</div>
+            <div class="delta">menunggu diproses agent</div>
+          </div>
+          <div class="kpi">
+            <div class="lbl"><span class="sw" style="background:var(--on)"></span>Sukses · 24 Jam</div>
+            <div class="num" id="mk-kpi-success">—</div>
+            <div class="delta">perintah berhasil dieksekusi</div>
+          </div>
+          <div class="kpi">
+            <div class="lbl"><span class="sw" style="background:var(--off)"></span>Gagal · 24 Jam</div>
+            <div class="num" id="mk-kpi-failed">—</div>
+            <div class="delta">perlu ditinjau / retry</div>
+          </div>
+          <div class="kpi">
+            <div class="lbl">Agent Terhubung</div>
+            <div class="num" id="mk-kpi-agents">—</div>
+            <div class="delta" id="mk-kpi-agents-sub">—</div>
+          </div>
+        </div>
+
+        <div class="card-head" style="margin-bottom:10px;"><h3>Status Agent per Server</h3><span class="muted">heartbeat</span></div>
+        <div id="mikrotik-agents-container" style="display:flex; flex-direction:column; gap:14px; margin-bottom:22px;"></div>
+
+        <div class="card-head" style="margin-bottom:10px;"><h3>Antrean Perintah</h3><span class="muted">mikrotik_commands</span></div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Server</th><th>Perintah</th><th>Status</th><th>Dibuat</th><th>Payload</th></tr>
+            </thead>
+            <tbody id="mikrotik-queue-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- PAGE: INVENTORY -->
+      <div class="page" id="page-inventory">
+        <div class="page-head">
+          <h2>Inventory</h2>
+          <p>Stok perangkat &amp; material lapangan (ONT, kabel, konektor, dll) per server — dari tabel <span class="mono-cell">inventory_items</span>.</p>
+        </div>
+
+        <div class="kpi-row">
+          <div class="kpi">
+            <div class="lbl">Jenis Barang</div>
+            <div class="num" id="iv-kpi-total">—</div>
+            <div class="delta">SKU terdaftar</div>
+          </div>
+          <div class="kpi">
+            <div class="lbl"><span class="sw" style="background:var(--iso)"></span>Stok Menipis</div>
+            <div class="num" id="iv-kpi-low">—</div>
+            <div class="delta">di bawah stok minimum</div>
+          </div>
+          <div class="kpi">
+            <div class="lbl"><span class="sw" style="background:var(--off)"></span>Stok Habis</div>
+            <div class="num" id="iv-kpi-empty">—</div>
+            <div class="delta">perlu restock segera</div>
+          </div>
+          <div class="kpi">
+            <div class="lbl">Total Unit</div>
+            <div class="num" id="iv-kpi-units">—</div>
+            <div class="delta">seluruh gudang</div>
+          </div>
+        </div>
+
+        <div class="device-toolbar">
+          <button class="btn btn-primary" style="width:auto; padding:9px 16px;" onclick="openInventoryModal('create')">+ Tambah Barang</button>
+          <div style="display:flex; gap:6px; flex-wrap:wrap;">
+            <button class="chip on" data-iv-filter="all" onclick="filterInventory('all', this)">Semua</button>
+            <button class="chip" data-iv-filter="low" onclick="filterInventory('low', this)"><span class="sw" style="background:var(--iso)"></span>Menipis</button>
+            <button class="chip" data-iv-filter="empty" onclick="filterInventory('empty', this)"><span class="sw" style="background:var(--off)"></span>Habis</button>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Nama Barang</th><th>Kategori</th><th>SKU</th><th>Server</th><th>Stok</th><th>Min. Stok</th><th>Status</th><th></th></tr>
+            </thead>
+            <tbody id="inventory-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
       <!-- PAGE: TEAM -->
       <div class="page" id="page-team">
         <div class="page-head">
@@ -567,6 +940,56 @@
               <tr><th>Kode</th><th>Server</th><th>Paket</th><th>Status</th><th>Dibuat</th><th></th></tr>
             </thead>
             <tbody id="voucher-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- PAGE: CRM & TIKET -->
+      <div class="page" id="page-tickets">
+        <div class="page-head">
+          <h2>CRM &amp; Tiket Gangguan</h2>
+          <p>Kelola tiket gangguan pelanggan, status penanganan, dan riwayat interaksi — terhubung ke data pelanggan &amp; teknisi yang sama.</p>
+        </div>
+
+        <div class="kpi-row">
+          <div class="kpi">
+            <div class="lbl"><span class="sw" style="background:var(--off)"></span>Tiket Terbuka</div>
+            <div class="num" id="tk-kpi-open">—</div>
+            <div class="delta">butuh penanganan</div>
+          </div>
+          <div class="kpi">
+            <div class="lbl"><span class="sw" style="background:var(--iso)"></span>Sedang Ditangani</div>
+            <div class="num" id="tk-kpi-progress">—</div>
+            <div class="delta">in progress</div>
+          </div>
+          <div class="kpi">
+            <div class="lbl"><span class="sw" style="background:var(--on)"></span>Selesai · 7 Hari</div>
+            <div class="num" id="tk-kpi-resolved">—</div>
+            <div class="delta">resolved minggu ini</div>
+          </div>
+          <div class="kpi">
+            <div class="lbl">Pelanggan Menunggak</div>
+            <div class="num" id="tk-kpi-overdue">—</div>
+            <div class="delta">invoice belum dibayar</div>
+          </div>
+        </div>
+
+        <div class="device-toolbar">
+          <button class="btn btn-primary" style="width:auto; padding:9px 16px;" onclick="openTicketModal()">+ Buat Tiket</button>
+          <div style="display:flex; gap:6px; flex-wrap:wrap;">
+            <button class="chip on" data-tk-filter="all" onclick="filterTickets('all', this)">Semua</button>
+            <button class="chip" data-tk-filter="open" onclick="filterTickets('open', this)"><span class="sw" style="background:var(--off)"></span>Terbuka</button>
+            <button class="chip" data-tk-filter="in_progress" onclick="filterTickets('in_progress', this)"><span class="sw" style="background:var(--iso)"></span>Diproses</button>
+            <button class="chip" data-tk-filter="resolved" onclick="filterTickets('resolved', this)"><span class="sw" style="background:var(--on)"></span>Selesai</button>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Pelanggan</th><th>Jenis</th><th>Teknisi</th><th>Status</th><th>Dibuat</th><th></th></tr>
+            </thead>
+            <tbody id="tickets-tbody"></tbody>
           </table>
         </div>
       </div>
@@ -638,10 +1061,192 @@
       </div>
       <div class="audit-mini" style="margin-top:6px;" id="d-audit-note">Setiap akses sandi tercatat di audit log.</div>
     </div>
+    <div class="dblock">
+      <label>Riwayat &amp; Tagihan</label>
+      <div class="feed" id="d-crm-history"></div>
+      <button class="btn btn-ghost" style="width:100%; margin-top:8px;" onclick="openTicketModal(currentCustomerId)">+ Buat Tiket untuk Pelanggan Ini</button>
+    </div>
   </div>
   <div class="drawer-actions">
     <button class="btn btn-ghost" onclick="regenPassword()">Ganti Sandi</button>
     <button class="btn btn-danger" id="d-toggle-status" onclick="toggleIsolir()">Isolir Pelanggan</button>
+  </div>
+</div>
+
+<!-- DEVICE MODAL -->
+<div class="modal-overlay" id="device-modal-overlay" onclick="if(event.target===this) closeDeviceModal()">
+  <div class="modal-box">
+    <div class="modal-head">
+      <h3 id="device-modal-title">Tambah Perangkat</h3>
+      <button class="drawer-close" onclick="closeDeviceModal()">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <label>Nama Perangkat</label>
+        <input type="text" id="dm-name" placeholder="mis. Router Inti — Kantor Pusat">
+      </div>
+      <div class="field">
+        <label>Server</label>
+        <select id="dm-site"></select>
+      </div>
+      <div class="field">
+        <label>Jenis Perangkat</label>
+        <select id="dm-type">
+          <option value="router">Router</option>
+          <option value="hub">Hub</option>
+          <option value="olt">OLT</option>
+          <option value="splitter">Splitter</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Induk (Parent) — opsional</label>
+        <select id="dm-parent">
+          <option value="">— Tidak ada (perangkat akar) —</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Alamat IP — opsional</label>
+        <input type="text" id="dm-ip" placeholder="mis. 10.10.1.1">
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeDeviceModal()">Batal</button>
+      <button class="btn btn-primary" id="dm-save-btn" onclick="saveDevice()">Simpan</button>
+    </div>
+  </div>
+</div>
+
+<!-- TICKET MODAL -->
+<div class="modal-overlay" id="ticket-modal-overlay" onclick="if(event.target===this) closeTicketModal()">
+  <div class="modal-box">
+    <div class="modal-head">
+      <h3>Buat Tiket Gangguan</h3>
+      <button class="drawer-close" onclick="closeTicketModal()">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <label>Pelanggan</label>
+        <select id="tk-customer"></select>
+      </div>
+      <div class="field">
+        <label>Jenis Tiket</label>
+        <select id="tk-type">
+          <option value="individu">Individu</option>
+          <option value="massal">Gangguan Massal</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Teknisi — opsional</label>
+        <select id="tk-technician">
+          <option value="">— Belum ditugaskan —</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Deskripsi</label>
+        <input type="text" id="tk-description" placeholder="mis. Koneksi putus sejak pagi">
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeTicketModal()">Batal</button>
+      <button class="btn btn-primary" id="tk-save-btn" onclick="saveTicket()">Buat Tiket</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="invoice-modal-overlay" onclick="if(event.target===this) closeInvoiceModal()">
+  <div class="modal-box">
+    <div class="modal-head">
+      <h3>Buat Invoice</h3>
+      <button class="drawer-close" onclick="closeInvoiceModal()">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <label>Pelanggan</label>
+        <select id="bl-customer"></select>
+      </div>
+      <div class="field">
+        <label>Periode (Bulan)</label>
+        <input type="month" id="bl-period">
+      </div>
+      <div class="field">
+        <label>Jumlah Tagihan (Rp)</label>
+        <input type="number" id="bl-amount" min="0" step="1000" placeholder="mis. 165000">
+      </div>
+      <div class="field">
+        <label>Status Awal</label>
+        <select id="bl-status">
+          <option value="unpaid">Belum Dibayar</option>
+          <option value="paid">Lunas</option>
+          <option value="overdue">Menunggak</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeInvoiceModal()">Batal</button>
+      <button class="btn btn-primary" id="bl-save-btn" onclick="saveInvoice()">Buat Invoice</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="inventory-modal-overlay" onclick="if(event.target===this) closeInventoryModal()">
+  <div class="modal-box">
+    <div class="modal-head">
+      <h3 id="iv-modal-title">Tambah Barang</h3>
+      <button class="drawer-close" onclick="closeInventoryModal()">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <label>Nama Barang</label>
+        <input type="text" id="iv-name" placeholder="mis. ONT ZTE F609">
+      </div>
+      <div class="field">
+        <label>Kategori</label>
+        <select id="iv-category">
+          <option value="ont">ONT / Modem</option>
+          <option value="router">Router</option>
+          <option value="kabel">Kabel Fiber</option>
+          <option value="konektor">Konektor / SC-APC</option>
+          <option value="aksesoris">Tiang / Aksesoris</option>
+          <option value="lainnya">Lainnya</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>SKU — opsional</label>
+        <input type="text" id="iv-sku" placeholder="mis. ONT-ZTE-F609">
+      </div>
+      <div class="field">
+        <label>Server</label>
+        <select id="iv-site"></select>
+      </div>
+      <div class="field">
+        <label>Satuan</label>
+        <input type="text" id="iv-unit" value="pcs" placeholder="pcs / meter / roll">
+      </div>
+      <div class="field">
+        <label>Stok Saat Ini</label>
+        <input type="number" id="iv-quantity" min="0" value="0">
+      </div>
+      <div class="field">
+        <label>Stok Minimum (alert)</label>
+        <input type="number" id="iv-min-stock" min="0" value="5">
+      </div>
+      <div class="field">
+        <label>Catatan — opsional</label>
+        <input type="text" id="iv-notes" placeholder="mis. disimpan di rak B2">
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeInventoryModal()">Batal</button>
+      <button class="btn btn-primary" id="iv-save-btn" onclick="saveInventoryItem()">Simpan</button>
+    </div>
   </div>
 </div>
 
@@ -673,14 +1278,34 @@
   let technicians = [];
   let vouchers = [];
   let invoices = [];
+  let inventoryItems = [];
   let connectionLogs = [];
   let tickets = [];
+  let networkNodes = [];
+  let mikrotikCommands = [];
   let currentSite = 'all';
   let currentCustomerId = null;
+  let editingDeviceId = null;
   let passRevealed = false;
   let realtimeChannel = null;
 
   function rand(a,b){ return Math.floor(Math.random()*(b-a+1))+a; }
+
+  // ---------- MOBILE SIDEBAR ----------
+  function toggleSidebar(){
+    document.querySelector('.sidebar').classList.toggle('open');
+    document.getElementById('sidebar-overlay').classList.toggle('open');
+  }
+  function closeSidebar(){
+    document.querySelector('.sidebar').classList.remove('open');
+    document.getElementById('sidebar-overlay').classList.remove('open');
+  }
+  function toggleMobileSearch(){
+    const box = document.getElementById('search-box');
+    const isOpen = box.style.display === 'flex';
+    box.style.display = isOpen ? 'none' : 'flex';
+    if(!isOpen) document.getElementById('global-search').focus();
+  }
 
   // ---------- LOGIN ----------
   async function doLogin(){
@@ -759,14 +1384,17 @@
   // ---------- FETCH ----------
   async function fetchAll(){
     const since24h = new Date(Date.now() - 24*3600*1000).toISOString();
-    const [sRes, cRes, tRes, vRes, invRes, logRes, tkRes] = await Promise.all([
+    const [sRes, cRes, tRes, vRes, invRes, logRes, tkRes, ndRes, mkRes, ivRes] = await Promise.all([
       sb.from('sites').select('*').order('name'),
       sb.from('customers').select('*').order('name'),
       sb.from('technicians').select('*').order('name'),
       sb.from('vouchers').select('*').order('created_at', {ascending:false}),
       sb.from('invoices').select('*').order('created_at', {ascending:false}).limit(1000),
       sb.from('connection_logs').select('*').gte('logged_at', since24h).order('logged_at', {ascending:false}).limit(1000),
-      sb.from('tickets').select('*').order('created_at', {ascending:false}).limit(50)
+      sb.from('tickets').select('*').order('created_at', {ascending:false}).limit(300),
+      sb.from('network_nodes').select('*'),
+      sb.from('mikrotik_commands').select('*').order('created_at', {ascending:false}).limit(200),
+      sb.from('inventory_items').select('*').order('name')
     ]);
     sites = sRes.data || [];
     customers = cRes.data || [];
@@ -775,11 +1403,21 @@
     invoices = invRes.data || [];
     connectionLogs = logRes.data || [];
     tickets = tkRes.data || [];
+    // network_nodes: nama kolom bisa berbeda antar deployment (lihat catatan schema di renderDevicesTree),
+    // jadi kita sort di client memakai fallback nama supaya tidak error kalau kolom 'name' tidak ada.
+    networkNodes = (ndRes.data || []).slice().sort((a,b)=>
+      (deviceLabel(a)).localeCompare(deviceLabel(b))
+    );
+    mikrotikCommands = mkRes.data || [];
+    inventoryItems = ivRes.data || [];
     if(sRes.error) console.error(sRes.error);
     if(cRes.error) console.error(cRes.error);
     if(invRes.error) console.error(invRes.error);
     if(logRes.error) console.error(logRes.error);
     if(tkRes.error) console.error(tkRes.error);
+    if(ndRes.error) console.error('network_nodes:', ndRes.error);
+    if(mkRes.error) console.error('mikrotik_commands:', mkRes.error);
+    if(ivRes.error) console.error('inventory_items:', ivRes.error);
   }
 
   function populateSiteSwitcher(){
@@ -805,20 +1443,39 @@
       })
       .on('postgres_changes', {event:'*', schema:'public', table:'sites'}, async ()=>{
         const { data } = await sb.from('sites').select('*').order('name');
-        sites = data || []; renderAgents();
+        sites = data || []; renderAgents(); renderAgents('mikrotik-agents-container'); renderMikrotikKpis();
       })
       .on('postgres_changes', {event:'*', schema:'public', table:'invoices'}, async ()=>{
         const { data } = await sb.from('invoices').select('*').order('created_at',{ascending:false}).limit(1000);
-        invoices = data || []; renderKPIs(); renderActivityFeed();
+        invoices = data || []; renderKPIs(); renderActivityFeed(); renderBillingPage();
       })
       .on('postgres_changes', {event:'*', schema:'public', table:'tickets'}, async ()=>{
-        const { data } = await sb.from('tickets').select('*').order('created_at',{ascending:false}).limit(50);
-        tickets = data || []; renderActivityFeed();
+        const { data } = await sb.from('tickets').select('*').order('created_at',{ascending:false}).limit(300);
+        tickets = data || []; renderActivityFeed(); renderTicketsPage();
       })
       .on('postgres_changes', {event:'*', schema:'public', table:'connection_logs'}, async ()=>{
         const since24h = new Date(Date.now() - 24*3600*1000).toISOString();
         const { data } = await sb.from('connection_logs').select('*').gte('logged_at', since24h).order('logged_at',{ascending:false}).limit(1000);
-        connectionLogs = data || []; renderBars(); renderActivityFeed();
+        connectionLogs = data || []; renderBars(); renderActivityFeed(); renderNetworkTopologyPage();
+      })
+      .on('postgres_changes', {event:'*', schema:'public', table:'network_nodes'}, async ()=>{
+        const { data, error } = await sb.from('network_nodes').select('*');
+        if(error){ console.error('network_nodes:', error); return; }
+        networkNodes = (data || []).slice().sort((a,b)=> deviceLabel(a).localeCompare(deviceLabel(b)));
+        renderDevicesTree();
+        renderNetworkTopologyPage();
+      })
+      .on('postgres_changes', {event:'*', schema:'public', table:'mikrotik_commands'}, async ()=>{
+        const { data, error } = await sb.from('mikrotik_commands').select('*').order('created_at',{ascending:false}).limit(200);
+        if(error){ console.error('mikrotik_commands:', error); return; }
+        mikrotikCommands = data || [];
+        renderMikrotikPage();
+      })
+      .on('postgres_changes', {event:'*', schema:'public', table:'inventory_items'}, async ()=>{
+        const { data, error } = await sb.from('inventory_items').select('*').order('name');
+        if(error){ console.error('inventory_items:', error); return; }
+        inventoryItems = data || [];
+        renderInventoryPage();
       })
       .subscribe();
   }
@@ -835,13 +1492,15 @@
   }
 
   // ---------- NAV ----------
-  const titles = {dashboard:'Dashboard', map:'Peta Pelanggan', customers:'Pelanggan', team:'Tim Teknisi', voucher:'Voucher Hotspot', settings:'Pengaturan'};
+  const titles = {dashboard:'Dashboard', map:'Peta Pelanggan', customers:'Pelanggan', billing:'Billing', devices:'Manajemen Perangkat', topology:'Topologi Jaringan', mikrotik:'Monitoring MikroTik', inventory:'Inventory', tickets:'CRM & Tiket', team:'Tim Teknisi', voucher:'Voucher Hotspot', settings:'Pengaturan'};
   function goPage(name){
     document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
     document.getElementById('page-'+name).classList.add('active');
     document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
     document.querySelector('.nav-item[data-page="'+name+'"]').classList.add('active');
     document.getElementById('topbar-title').textContent = titles[name];
+    // Di layar mobile, sidebar dibuka sebagai overlay off-canvas — tutup otomatis setelah memilih halaman
+    if(window.innerWidth <= 900) closeSidebar();
   }
 
   // ---------- RENDER ----------
@@ -953,13 +1612,13 @@
     .forEach((c)=>{
       const tr = document.createElement('tr');
       tr.innerHTML = `
-        <td>${c.name}</td>
-        <td class="mono-cell">${c.customer_code}</td>
-        <td class="mono-cell">${siteName(c.site_id).split(' — ')[0]}</td>
-        <td><span class="badge type ${c.access_type==='OLT_GPON'?'olt':''}">${c.access_type==='OLT_GPON'?'OLT':'LAN/Hub'}</span></td>
-        <td>${c.package||'—'}</td>
-        <td><span class="badge ${statusClass(c.status)}"><span class="sw" style="background:${statusColor(c.status)}"></span>${c.status}</span></td>
-        <td class="mono-cell">${c.pppoe_username||'—'}</td>
+        <td data-label="Nama"><strong>${c.name}</strong></td>
+        <td class="mono-cell" data-label="ID">${c.customer_code}</td>
+        <td class="mono-cell" data-label="Server">${siteName(c.site_id).split(' — ')[0]}</td>
+        <td data-label="Akses"><span class="badge type ${c.access_type==='OLT_GPON'?'olt':''}">${c.access_type==='OLT_GPON'?'OLT':'LAN/Hub'}</span></td>
+        <td data-label="Paket">${c.package||'—'}</td>
+        <td data-label="Status"><span class="badge ${statusClass(c.status)}"><span class="sw" style="background:${statusColor(c.status)}"></span>${c.status}</span></td>
+        <td class="mono-cell" data-label="Username">${c.pppoe_username||'—'}</td>
         <td><button class="row-link" onclick="openDrawer('${c.id}')">Lihat →</button></td>
       `;
       tb.appendChild(tr);
@@ -976,10 +1635,10 @@
       const cls = t.status==='Tersedia' ? 'on' : t.status==='Bertugas' ? 'iso' : 'off';
       const tr = document.createElement('tr');
       tr.innerHTML = `
-        <td>${t.name}</td>
-        <td class="mono-cell">${siteName(t.site_id).split(' — ')[0]}</td>
-        <td><span class="badge ${cls}"><span class="sw" style="background:${cls==='on'?'var(--on)':cls==='iso'?'var(--iso)':'var(--off)'}"></span>${t.status}</span></td>
-        <td>${t.active_tickets}</td>
+        <td data-label="Nama"><strong>${t.name}</strong></td>
+        <td class="mono-cell" data-label="Server">${siteName(t.site_id).split(' — ')[0]}</td>
+        <td data-label="Status"><span class="badge ${cls}"><span class="sw" style="background:${cls==='on'?'var(--on)':cls==='iso'?'var(--iso)':'var(--off)'}"></span>${t.status}</span></td>
+        <td data-label="Tiket Aktif">${t.active_tickets}</td>
       `;
       tb.appendChild(tr);
     });
@@ -988,8 +1647,9 @@
     }
   }
 
-  function renderAgents(){
-    const el = document.getElementById('agents-container'); el.innerHTML='';
+  function renderAgents(containerId){
+    const el = document.getElementById(containerId || 'agents-container'); if(!el) return;
+    el.innerHTML='';
     const list = currentSite==='all' ? sites : sites.filter(s=>s.id===currentSite);
     list.forEach(s=>{
       const connected = s.agent_status==='terhubung';
@@ -1011,6 +1671,74 @@
     }
   }
 
+  // ---------- MONITORING MIKROTIK (mikrotik_commands) ----------
+  // CATATAN SKEMA: constitution memastikan mikrotik_commands punya site_id, payload (jsonb),
+  // status ('pending'|'success'|'failed'), dan (seperti tabel operasional lain) created_at.
+  // Nama field perintah di dalam payload tidak didokumentasikan, jadi dibaca toleran dari
+  // beberapa kemungkinan key umum. Payload TIDAK ditampilkan otomatis di tabel (bisa memuat
+  // kredensial plaintext transit sesuai catatan konstitusi §5.6) — hanya lewat tombol "Lihat" on-demand.
+  function commandLabel(cmd){
+    const p = cmd.payload || {};
+    return cmd.command_type || cmd.action || cmd.type || p.command || p.action || p.type || 'Perintah MikroTik';
+  }
+  function commandStatusMeta(status){
+    if(status==='success') return { cls:'on', label:'Sukses' };
+    if(status==='failed') return { cls:'off', label:'Gagal' };
+    return { cls:'iso', label:'Pending' };
+  }
+
+  function renderMikrotikKpis(){
+    const since24h = Date.now() - 24*3600*1000;
+    const scoped = mikrotikCommands.filter(inSite);
+    const pending = scoped.filter(c=>c.status==='pending').length;
+    const success24 = scoped.filter(c=>c.status==='success' && c.created_at && new Date(c.created_at).getTime()>=since24h).length;
+    const failed24 = scoped.filter(c=>c.status==='failed' && c.created_at && new Date(c.created_at).getTime()>=since24h).length;
+    const relevantSites = currentSite==='all' ? sites : sites.filter(s=>s.id===currentSite);
+    const connectedCount = relevantSites.filter(s=>s.agent_status==='terhubung').length;
+
+    const set = (id, val)=>{ const el=document.getElementById(id); if(el) el.textContent = val; };
+    set('mk-kpi-pending', pending);
+    set('mk-kpi-success', success24);
+    set('mk-kpi-failed', failed24);
+    set('mk-kpi-agents', connectedCount + '/' + relevantSites.length);
+    set('mk-kpi-agents-sub', relevantSites.length ? (relevantSites.length - connectedCount) + ' server terputus' : 'belum ada server');
+  }
+
+  function renderMikrotikQueue(){
+    const tb = document.getElementById('mikrotik-queue-tbody'); if(!tb) return;
+    tb.innerHTML = '';
+    mikrotikCommands.filter(inSite).forEach(cmd=>{
+      const meta = commandStatusMeta(cmd.status);
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td class="mono-cell" data-label="Server">${siteName(cmd.site_id).split(' — ')[0]}</td>
+        <td data-label="Perintah">${commandLabel(cmd)}</td>
+        <td data-label="Status"><span class="badge ${meta.cls}"><span class="sw" style="background:${meta.cls==='on'?'var(--on)':meta.cls==='off'?'var(--off)':'var(--iso)'}"></span>${meta.label}</span></td>
+        <td class="mono-cell" data-label="Dibuat">${cmd.created_at ? timeAgo(cmd.created_at) : '—'}</td>
+        <td data-label="Payload">
+          <button class="row-link" onclick="togglePayload('${cmd.id}')">${cmd.payload_shown ? 'Sembunyikan' : 'Lihat'}</button>
+          ${cmd.payload_shown ? `<div class="audit-mini" style="margin-top:4px; max-width:260px; word-break:break-all;">${escapeHtml(JSON.stringify(cmd.payload||{}))}</div>` : ''}
+        </td>
+      `;
+      tb.appendChild(tr);
+    });
+    if(!tb.children.length){
+      tb.innerHTML = '<tr><td colspan="5" class="empty-note">Belum ada antrean perintah untuk server ini</td></tr>';
+    }
+  }
+  function togglePayload(id){
+    const cmd = mikrotikCommands.find(c=>c.id===id); if(!cmd) return;
+    cmd.payload_shown = !cmd.payload_shown;
+    renderMikrotikQueue();
+  }
+  function escapeHtml(s){ return s.replace(/[&<>]/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[m])); }
+
+  function renderMikrotikPage(){
+    renderMikrotikKpis();
+    renderMikrotikQueue();
+    renderAgents('mikrotik-agents-container');
+  }
+
   function renderVoucherTable(){
     const tb = document.getElementById('voucher-tbody'); tb.innerHTML='';
     vouchers.filter(inSite).forEach((v)=>{
@@ -1019,7 +1747,7 @@
         : '<span class="badge iso"><span class="sw" style="background:var(--iso)"></span>Kedaluwarsa</span>';
       const tr = document.createElement('tr');
       tr.innerHTML = `
-        <td class="mono-cell">
+        <td class="mono-cell" data-label="Kode">
           <div class="cred-box" style="display:inline-flex; padding:5px 9px;">
             <span class="cred-val ${v.revealed_code?'':'masked'}" style="min-width:110px;">${v.revealed_code ? v.revealed_code : '••••-••••'}</span>
             <button class="icon-btn" onclick="toggleVoucher('${v.id}')" title="Lihat kode">
@@ -1027,10 +1755,10 @@
             </button>
           </div>
         </td>
-        <td class="mono-cell">${siteName(v.site_id).split(' — ')[0]}</td>
-        <td>${v.package}</td>
-        <td>${statusBadge}</td>
-        <td class="mono-cell">${new Date(v.created_at).toLocaleDateString('id-ID')}</td>
+        <td class="mono-cell" data-label="Server">${siteName(v.site_id).split(' — ')[0]}</td>
+        <td data-label="Paket">${v.package}</td>
+        <td data-label="Status">${statusBadge}</td>
+        <td class="mono-cell" data-label="Dibuat">${new Date(v.created_at).toLocaleDateString('id-ID')}</td>
         <td></td>
       `;
       tb.appendChild(tr);
@@ -1089,6 +1817,7 @@
     document.getElementById('d-status-text').textContent = c.status;
 
     document.getElementById('d-toggle-status').textContent = c.status==='Isolir' ? 'Pulihkan Akses' : 'Isolir Pelanggan';
+    renderDrawerCrmHistory(customerId);
 
     document.getElementById('drawer').classList.add('open');
     document.getElementById('overlay').classList.add('open');
@@ -1206,6 +1935,936 @@
       : '<div class="feed-row"><span class="who muted">Belum ada aktivitas tercatat.</span></div>';
   }
 
+  // ---------- DEVICE MANAGER (network_nodes) ----------
+  // CATATAN SKEMA: MASTER_PROJECT_CONSTITUTION.md §4.1 hanya memastikan kolom
+  // site_id, type ('router'|'hub'|'olt'|'splitter'), dan parent_id (self-reference)
+  // ada di tabel network_nodes. Kolom nama tampilan & IP belum dikonfirmasi di
+  // schema.sql yang diaudit, jadi kode di bawah ini TOLERAN terhadap variasi nama
+  // kolom (name/label/hostname, ip_address/ip) lewat fallback, dan insert/update
+  // memakai try/catch supaya kalau nama kolom di database Anda berbeda, pesan
+  // error asli dari Supabase langsung tampil di toast (bukan gagal diam-diam).
+  // Sesuai Aturan Konstitusi §10.6: setiap perubahan skema wajib direfleksikan
+  // balik ke schema.sql — bila Anda menambah kolom baru di network_nodes untuk
+  // fitur ini, catat di schema.sql agar dokumen tetap jadi single source of truth.
+  function deviceLabel(n){
+    return n.name || n.label || n.hostname || n.device_name || ('Perangkat ' + String(n.id).slice(0,8));
+  }
+  function deviceIp(n){
+    return n.ip_address || n.ip || n.management_ip || '';
+  }
+  const deviceTypeMeta = {
+    router:   { label:'Router',   icon:'<path d="M3 11h18M3 11a2 2 0 00-2 2v4a2 2 0 002 2h18a2 2 0 002-2v-4a2 2 0 00-2-2M7 17h.01M11 17h.01"/><path d="M7 11V7a2 2 0 012-2h6a2 2 0 012 2v4"/>' },
+    hub:      { label:'Hub',      icon:'<rect x="3" y="9" width="18" height="6" rx="1.5"/><circle cx="7" cy="12" r="0.8"/><circle cx="12" cy="12" r="0.8"/><circle cx="17" cy="12" r="0.8"/>' },
+    olt:      { label:'OLT',      icon:'<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 9h8M8 12h8M8 15h5"/>' },
+    splitter: { label:'Splitter', icon:'<path d="M4 6h4l4 6-4 6H4M20 6h-4l-4 6 4 6h4"/>' }
+  };
+  function deviceTypeLabel(t){ return (deviceTypeMeta[t] && deviceTypeMeta[t].label) || t || '—'; }
+
+  let deviceViewMode = 'list';
+  function switchDeviceView(mode, btn){
+    deviceViewMode = mode;
+    document.querySelectorAll('.device-toolbar .chip').forEach(c=>c.classList.remove('on'));
+    btn.classList.add('on');
+    document.getElementById('devices-tree').style.display = mode==='list' ? '' : 'none';
+    document.getElementById('devices-topology').style.display = mode==='topology' ? '' : 'none';
+    if(mode==='topology') renderDevicesTopology();
+  }
+
+  // Susun node per-site jadi level (BFS multi-root) supaya bisa digambar sebagai diagram SVG.
+  function computeTopoLevels(nodesInSite){
+    const roots = nodesInSite.filter(n => !n.parent_id || !nodesInSite.some(x=>x.id===n.parent_id));
+    const levels = [];
+    const visited = new Set();
+    let current = roots;
+    while(current.length){
+      levels.push(current);
+      current.forEach(n=>visited.add(n.id));
+      const next = [];
+      current.forEach(n=>{
+        nodesInSite.filter(c=>c.parent_id===n.id).forEach(c=>{ if(!visited.has(c.id)) next.push(c); });
+      });
+      current = next;
+    }
+    const missing = nodesInSite.filter(n=>!visited.has(n.id));
+    if(missing.length) levels.push(missing);
+    return levels;
+  }
+
+  function renderDevicesTopology(){
+    const el = document.getElementById('devices-topology'); if(!el) return;
+    const scoped = networkNodes.filter(inSite);
+    const relevantSites = currentSite==='all' ? sites : sites.filter(s=>s.id===currentSite);
+    el.innerHTML = '';
+
+    if(!scoped.length){
+      el.innerHTML = '<div class="empty-note">Belum ada perangkat untuk digambarkan sebagai topologi.</div>';
+      return;
+    }
+
+    const BOX_W = 148, BOX_H = 56, HGAP = 26, VGAP = 66, PAD = 26;
+    const NS = 'http://www.w3.org/2000/svg';
+
+    relevantSites.forEach(site=>{
+      const siteNodes = scoped.filter(n=>n.site_id===site.id);
+      if(!siteNodes.length) return;
+
+      const levels = computeTopoLevels(siteNodes);
+      const maxPerLevel = Math.max(...levels.map(l=>l.length));
+      const svgW = Math.max(maxPerLevel * (BOX_W+HGAP) + PAD, BOX_W + PAD*2);
+      const svgH = levels.length * (BOX_H+VGAP) + PAD;
+
+      const pos = {}; // node.id -> {x,y}
+      levels.forEach((levelNodes, li)=>{
+        const rowW = levelNodes.length * (BOX_W+HGAP) - HGAP;
+        const startX = (svgW - rowW) / 2;
+        levelNodes.forEach((n, i)=>{
+          pos[n.id] = { x: startX + i*(BOX_W+HGAP), y: PAD + li*(BOX_H+VGAP) };
+        });
+      });
+
+      const block = document.createElement('div');
+      block.className = 'topo-site-block';
+      block.innerHTML = `<div class="dsg-head">${site.name}<span class="muted">${siteNodes.length} perangkat</span></div>`;
+      const scrollWrap = document.createElement('div');
+      scrollWrap.className = 'topo-scroll';
+
+      const svg = document.createElementNS(NS, 'svg');
+      svg.setAttribute('width', svgW);
+      svg.setAttribute('height', svgH);
+      svg.setAttribute('viewBox', `0 0 ${svgW} ${svgH}`);
+
+      // Garis penghubung parent -> child (digambar dulu supaya berada di belakang kotak node)
+      siteNodes.forEach(n=>{
+        if(!n.parent_id || !pos[n.parent_id]) return;
+        const p = pos[n.parent_id], c = pos[n.id];
+        const x1 = p.x + BOX_W/2, y1 = p.y + BOX_H;
+        const x2 = c.x + BOX_W/2, y2 = c.y;
+        const midY = (y1+y2)/2;
+        const path = document.createElementNS(NS, 'path');
+        path.setAttribute('class', 'topo-link');
+        path.setAttribute('d', `M${x1},${y1} C${x1},${midY} ${x2},${midY} ${x2},${y2}`);
+        svg.appendChild(path);
+      });
+
+      siteNodes.forEach(n=>{
+        const p = pos[n.id]; if(!p) return;
+        const custCount = customers.filter(c=>c.node_id===n.id).length;
+        const ip = deviceIp(n);
+        const g = document.createElementNS(NS, 'g');
+        g.setAttribute('class', 'topo-node-box type-'+(n.type||''));
+        g.setAttribute('transform', `translate(${p.x},${p.y})`);
+        g.style.cursor = 'pointer';
+        g.addEventListener('click', ()=>openDeviceModal('edit', n.id));
+
+        const rect = document.createElementNS(NS, 'rect');
+        rect.setAttribute('width', BOX_W); rect.setAttribute('height', BOX_H); rect.setAttribute('rx', 8);
+        g.appendChild(rect);
+
+        const title = document.createElementNS(NS, 'text');
+        title.setAttribute('class', 'topo-title'); title.setAttribute('x', 10); title.setAttribute('y', 21);
+        title.textContent = deviceLabel(n).length > 20 ? deviceLabel(n).slice(0,19)+'…' : deviceLabel(n);
+        g.appendChild(title);
+
+        const sub = document.createElementNS(NS, 'text');
+        sub.setAttribute('class', 'topo-sub'); sub.setAttribute('x', 10); sub.setAttribute('y', 36);
+        sub.textContent = deviceTypeLabel(n.type) + (ip ? ' · '+ip : '');
+        g.appendChild(sub);
+
+        const sub2 = document.createElementNS(NS, 'text');
+        sub2.setAttribute('class', 'topo-sub'); sub2.setAttribute('x', 10); sub2.setAttribute('y', 48);
+        sub2.textContent = custCount > 0 ? custCount+' pelanggan terhubung' : 'tidak ada pelanggan';
+        g.appendChild(sub2);
+
+        svg.appendChild(g);
+      });
+
+      scrollWrap.appendChild(svg);
+      block.appendChild(scrollWrap);
+      el.appendChild(block);
+    });
+
+    if(!el.children.length){
+      el.innerHTML = '<div class="empty-note">Tidak ada perangkat untuk server yang dipilih.</div>';
+    }
+  }
+
+  // ---------- NETWORK TOPOLOGY (monitoring, terpisah dari Device Manager) ----------
+  // Kesehatan node dihitung dari pelanggan yang terhubung LANGSUNG ke node itu (customers.node_id),
+  // sama seperti custCount di renderDevicesTopology — bukan agregasi rekursif ke anak node.
+  function nodeHealth(nodeId){
+    const custs = customers.filter(c=>c.node_id===nodeId);
+    const total = custs.length;
+    const online = custs.filter(c=>c.status==='Aktif').length;
+    const offline = custs.filter(c=>c.status==='Offline').length;
+    const isolir = custs.filter(c=>c.status==='Isolir').length;
+    const idSet = new Set(custs.map(c=>c.id));
+    const signals = connectionLogs.filter(l=>idSet.has(l.customer_id) && l.signal_dbm!=null).map(l=>Number(l.signal_dbm));
+    const avgSignal = signals.length ? signals.reduce((a,b)=>a+b,0)/signals.length : null;
+    let cls = 'none';
+    if(total>0){
+      const badRatio = (offline+isolir)/total;
+      cls = badRatio===0 ? 'ok' : badRatio < 0.5 ? 'warn' : 'bad';
+    }
+    return { total, online, offline, isolir, avgSignal, cls };
+  }
+
+  function filterTopology(mode, btn){
+    topologyFilter = mode;
+    document.querySelectorAll('#page-topology .chip').forEach(c=>c.classList.remove('on'));
+    btn.classList.add('on');
+    renderNetworkTopologyDiagram();
+  }
+
+  function renderNetworkTopologyKpis(){
+    const scoped = networkNodes.filter(inSite);
+    const idSet = new Set(customers.filter(inSite).map(c=>c.id));
+    let problemNodes = 0, connected = 0;
+    scoped.forEach(n=>{
+      const h = nodeHealth(n.id);
+      connected += h.total;
+      if(h.cls==='warn' || h.cls==='bad') problemNodes++;
+    });
+    const signals = connectionLogs.filter(l=>idSet.has(l.customer_id) && l.signal_dbm!=null).map(l=>Number(l.signal_dbm));
+    const avgSignal = signals.length ? (signals.reduce((a,b)=>a+b,0)/signals.length) : null;
+
+    const set = (id, val)=>{ const el=document.getElementById(id); if(el) el.textContent = val; };
+    set('nt-kpi-total', scoped.length);
+    set('nt-kpi-problem', problemNodes);
+    set('nt-kpi-connected', connected);
+    set('nt-kpi-signal', avgSignal!=null ? avgSignal.toFixed(1)+' dBm' : '—');
+  }
+
+  function renderNetworkTopologyDiagram(){
+    const el = document.getElementById('network-topology-diagram'); if(!el) return;
+    const scoped = networkNodes.filter(inSite);
+    const relevantSites = currentSite==='all' ? sites : sites.filter(s=>s.id===currentSite);
+    el.innerHTML = '';
+
+    if(!scoped.length){
+      el.innerHTML = '<div class="empty-note">Belum ada perangkat untuk digambarkan sebagai topologi.</div>';
+      return;
+    }
+
+    const BOX_W = 148, BOX_H = 56, HGAP = 26, VGAP = 66, PAD = 26;
+    const NS = 'http://www.w3.org/2000/svg';
+
+    relevantSites.forEach(site=>{
+      const siteNodes = scoped.filter(n=>n.site_id===site.id);
+      if(!siteNodes.length) return;
+
+      const levels = computeTopoLevels(siteNodes);
+      const maxPerLevel = Math.max(...levels.map(l=>l.length));
+      const svgW = Math.max(maxPerLevel * (BOX_W+HGAP) + PAD, BOX_W + PAD*2);
+      const svgH = levels.length * (BOX_H+VGAP) + PAD;
+
+      const pos = {};
+      levels.forEach((levelNodes, li)=>{
+        const rowW = levelNodes.length * (BOX_W+HGAP) - HGAP;
+        const startX = (svgW - rowW) / 2;
+        levelNodes.forEach((n, i)=>{
+          pos[n.id] = { x: startX + i*(BOX_W+HGAP), y: PAD + li*(BOX_H+VGAP) };
+        });
+      });
+
+      const block = document.createElement('div');
+      block.className = 'topo-site-block';
+      const problemCount = siteNodes.filter(n=>{ const h=nodeHealth(n.id); return h.cls==='warn'||h.cls==='bad'; }).length;
+      block.innerHTML = `<div class="dsg-head">${site.name}<span class="muted">${siteNodes.length} perangkat · ${problemCount} bermasalah</span></div>`;
+      const scrollWrap = document.createElement('div');
+      scrollWrap.className = 'topo-scroll';
+
+      const svg = document.createElementNS(NS, 'svg');
+      svg.setAttribute('width', svgW);
+      svg.setAttribute('height', svgH);
+      svg.setAttribute('viewBox', `0 0 ${svgW} ${svgH}`);
+
+      siteNodes.forEach(n=>{
+        if(!n.parent_id || !pos[n.parent_id]) return;
+        const p = pos[n.parent_id], c = pos[n.id];
+        const x1 = p.x + BOX_W/2, y1 = p.y + BOX_H;
+        const x2 = c.x + BOX_W/2, y2 = c.y;
+        const midY = (y1+y2)/2;
+        const path = document.createElementNS(NS, 'path');
+        path.setAttribute('class', 'topo-link');
+        path.setAttribute('d', `M${x1},${y1} C${x1},${midY} ${x2},${midY} ${x2},${y2}`);
+        svg.appendChild(path);
+      });
+
+      siteNodes.forEach(n=>{
+        const p = pos[n.id]; if(!p) return;
+        const h = nodeHealth(n.id);
+        const ip = deviceIp(n);
+        const isDimmed = topologyFilter==='problem' && h.cls!=='warn' && h.cls!=='bad';
+        const g = document.createElementNS(NS, 'g');
+        g.setAttribute('class', `topo-node-box type-${n.type||''} health-${h.cls}` + (isDimmed ? ' dim' : ''));
+        g.setAttribute('transform', `translate(${p.x},${p.y})`);
+        g.style.cursor = 'pointer';
+        g.addEventListener('click', ()=>goPage('devices'));
+
+        const title_ = document.createElementNS(NS, 'title');
+        title_.textContent = h.total>0
+          ? `${deviceLabel(n)} — ${h.online} online, ${h.offline} offline, ${h.isolir} isolir`
+          : `${deviceLabel(n)} — tidak ada pelanggan terhubung`;
+        g.appendChild(title_);
+
+        const rect = document.createElementNS(NS, 'rect');
+        rect.setAttribute('width', BOX_W); rect.setAttribute('height', BOX_H); rect.setAttribute('rx', 8);
+        g.appendChild(rect);
+
+        const title = document.createElementNS(NS, 'text');
+        title.setAttribute('class', 'topo-title'); title.setAttribute('x', 10); title.setAttribute('y', 21);
+        title.textContent = deviceLabel(n).length > 20 ? deviceLabel(n).slice(0,19)+'…' : deviceLabel(n);
+        g.appendChild(title);
+
+        const sub = document.createElementNS(NS, 'text');
+        sub.setAttribute('class', 'topo-sub'); sub.setAttribute('x', 10); sub.setAttribute('y', 36);
+        sub.textContent = deviceTypeLabel(n.type) + (ip ? ' · '+ip : '');
+        g.appendChild(sub);
+
+        const sub2 = document.createElementNS(NS, 'text');
+        sub2.setAttribute('class', 'topo-sub'); sub2.setAttribute('x', 10); sub2.setAttribute('y', 48);
+        sub2.textContent = h.total>0 ? `${h.online} online · ${h.offline+h.isolir} bermasalah` : 'tidak ada pelanggan';
+        g.appendChild(sub2);
+
+        svg.appendChild(g);
+      });
+
+      scrollWrap.appendChild(svg);
+      block.appendChild(scrollWrap);
+      el.appendChild(block);
+    });
+
+    if(!el.children.length){
+      el.innerHTML = '<div class="empty-note">Tidak ada perangkat untuk server yang dipilih.</div>';
+    }
+  }
+
+  function renderNetworkTopologyPage(){
+    renderNetworkTopologyKpis();
+    renderNetworkTopologyDiagram();
+  }
+
+  function renderDevicesTree(){
+    const el = document.getElementById('devices-tree'); if(!el) return;
+    const countHint = document.getElementById('device-count-hint');
+    const scoped = networkNodes.filter(inSite);
+    if(countHint) countHint.textContent = scoped.length + ' perangkat di ' + (currentSite==='all' ? 'semua server' : siteName(currentSite));
+
+    if(!scoped.length){
+      el.innerHTML = '<div class="empty-note">Belum ada perangkat terdaftar. Klik "Tambah Perangkat" untuk mulai memetakan topologi.</div>';
+      return;
+    }
+
+    const relevantSites = currentSite==='all' ? sites : sites.filter(s=>s.id===currentSite);
+    el.innerHTML = '';
+
+    function buildNode(n, depth){
+      const meta = deviceTypeMeta[n.type] || { label:n.type||'—', icon:'<circle cx="12" cy="12" r="8"/>' };
+      const ip = deviceIp(n);
+      const children = scoped.filter(c => c.parent_id === n.id);
+      const wrap = document.createElement('div');
+      wrap.className = 'device-depth-wrap';
+      wrap.innerHTML = `
+        <div class="device-node type-${n.type||''}">
+          <div class="dn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">${meta.icon}</svg></div>
+          <div class="dn-main">
+            <div class="dn-name">${deviceLabel(n)}</div>
+            <div class="dn-meta"><span>${deviceTypeLabel(n.type)}</span>${ip?`<span>${ip}</span>`:''}${children.length?`<span>${children.length} anak perangkat</span>`:''}</div>
+          </div>
+          <div class="dn-actions">
+            <button class="icon-btn" title="Tambah anak perangkat" onclick="openDeviceModal('create','${n.id}')">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+            </button>
+            <button class="icon-btn" title="Edit" onclick="openDeviceModal('edit','${n.id}')">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/></svg>
+            </button>
+            <button class="icon-btn" title="Hapus" onclick="deleteDevice('${n.id}')">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>
+            </button>
+          </div>
+        </div>
+      `;
+      if(children.length){
+        const childWrap = document.createElement('div');
+        childWrap.className = 'device-children';
+        children.forEach(c => childWrap.appendChild(buildNode(c, depth+1)));
+        wrap.appendChild(childWrap);
+      }
+      return wrap;
+    }
+
+    relevantSites.forEach(site=>{
+      const siteNodes = scoped.filter(n=>n.site_id===site.id);
+      if(!siteNodes.length) return;
+      const roots = siteNodes.filter(n => !n.parent_id || !siteNodes.some(x=>x.id===n.parent_id));
+      const group = document.createElement('div');
+      group.className = 'device-site-group';
+      group.innerHTML = `<div class="dsg-head">${site.name}<span class="muted">${siteNodes.length} perangkat</span></div>`;
+      const list = document.createElement('div');
+      list.className = 'device-node-list';
+      roots.forEach(r => list.appendChild(buildNode(r, 0)));
+      group.appendChild(list);
+      el.appendChild(group);
+    });
+
+    if(!el.children.length){
+      el.innerHTML = '<div class="empty-note">Tidak ada perangkat untuk server yang dipilih.</div>';
+    }
+    if(deviceViewMode==='topology') renderDevicesTopology();
+  }
+
+  function populateDeviceSiteSelect(selectedSiteId){
+    const sel = document.getElementById('dm-site');
+    sel.innerHTML = sites.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+    sel.value = selectedSiteId || (currentSite!=='all' ? currentSite : (sites[0] && sites[0].id) || '');
+  }
+  function populateDeviceParentSelect(siteId, excludeId){
+    const sel = document.getElementById('dm-parent');
+    const candidates = networkNodes.filter(n => n.site_id===siteId && n.id!==excludeId);
+    sel.innerHTML = '<option value="">— Tidak ada (perangkat akar) —</option>' +
+      candidates.map(n=>`<option value="${n.id}">${deviceLabel(n)} (${deviceTypeLabel(n.type)})</option>`).join('');
+  }
+
+  function openDeviceModal(mode, refId){
+    editingDeviceId = mode==='edit' ? refId : null;
+    const presetParentId = mode==='create' ? (refId || '') : null;
+    const node = mode==='edit' ? networkNodes.find(n=>n.id===refId) : null;
+
+    document.getElementById('device-modal-title').textContent = mode==='edit' ? 'Edit Perangkat' : 'Tambah Perangkat';
+    document.getElementById('dm-name').value = node ? deviceLabel(node) : '';
+    document.getElementById('dm-ip').value = node ? deviceIp(node) : '';
+    document.getElementById('dm-type').value = node ? (node.type||'router') : 'router';
+
+    const siteId = node ? node.site_id : (currentSite!=='all' ? currentSite : (sites[0] && sites[0].id));
+    populateDeviceSiteSelect(siteId);
+    populateDeviceParentSelect(siteId, node ? node.id : null);
+    if(node && node.parent_id) document.getElementById('dm-parent').value = node.parent_id;
+    if(!node && presetParentId) document.getElementById('dm-parent').value = presetParentId;
+
+    document.getElementById('dm-site').onchange = ()=>{
+      populateDeviceParentSelect(document.getElementById('dm-site').value, node ? node.id : null);
+    };
+
+    document.getElementById('device-modal-overlay').classList.add('open');
+  }
+  function closeDeviceModal(){
+    document.getElementById('device-modal-overlay').classList.remove('open');
+    editingDeviceId = null;
+  }
+
+  async function saveDevice(){
+    const name = document.getElementById('dm-name').value.trim();
+    const siteId = document.getElementById('dm-site').value;
+    const type = document.getElementById('dm-type').value;
+    const parentId = document.getElementById('dm-parent').value || null;
+    const ip = document.getElementById('dm-ip').value.trim();
+
+    if(!name){ showToast('Nama perangkat wajib diisi'); return; }
+    if(!siteId){ showToast('Pilih server terlebih dahulu'); return; }
+
+    const btn = document.getElementById('dm-save-btn');
+    btn.disabled = true; btn.textContent = 'Menyimpan…';
+    try {
+      const payload = { site_id: siteId, type, parent_id: parentId, name };
+      if(ip) payload.ip_address = ip;
+
+      let error;
+      if(editingDeviceId){
+        ({ error } = await sb.from('network_nodes').update(payload).eq('id', editingDeviceId));
+      } else {
+        ({ error } = await sb.from('network_nodes').insert(payload));
+      }
+      if(error){
+        showToast('Gagal menyimpan perangkat: ' + error.message);
+        return;
+      }
+
+      const { data, error: reErr } = await sb.from('network_nodes').select('*');
+      if(!reErr) networkNodes = (data||[]).slice().sort((a,b)=> deviceLabel(a).localeCompare(deviceLabel(b)));
+      renderDevicesTree();
+      closeDeviceModal();
+      showToast(editingDeviceId ? 'Perangkat diperbarui' : 'Perangkat ditambahkan');
+    } catch(e){
+      showToast('Terjadi kesalahan: ' + (e && e.message ? e.message : String(e)));
+    } finally {
+      btn.disabled = false; btn.textContent = 'Simpan';
+    }
+  }
+
+  async function deleteDevice(id){
+    const node = networkNodes.find(n=>n.id===id);
+    const hasChildren = networkNodes.some(n=>n.parent_id===id);
+    if(hasChildren){
+      showToast('Tidak bisa menghapus — perangkat ini masih punya anak perangkat. Pindahkan atau hapus anaknya dulu.');
+      return;
+    }
+    if(!confirm(`Hapus perangkat "${node ? deviceLabel(node) : ''}"? Tindakan ini tidak bisa dibatalkan.`)) return;
+
+    const { error } = await sb.from('network_nodes').delete().eq('id', id);
+    if(error){ showToast('Gagal menghapus: ' + error.message); return; }
+    networkNodes = networkNodes.filter(n=>n.id!==id);
+    renderDevicesTree();
+    showToast('Perangkat dihapus');
+  }
+
+  // ---------- INVENTORY ----------
+  const inventoryCategoryLabel = {ont:'ONT / Modem', router:'Router', kabel:'Kabel Fiber', konektor:'Konektor / SC-APC', aksesoris:'Tiang / Aksesoris', lainnya:'Lainnya'};
+
+  function inventoryStatusMeta(item){
+    const qty = Number(item.quantity||0);
+    const min = Number(item.min_stock||0);
+    if(qty <= 0) return { cls:'off', label:'Stok Habis' };
+    if(qty < min) return { cls:'iso', label:'Stok Menipis' };
+    return { cls:'on', label:'Stok Aman' };
+  }
+
+  function filterInventory(mode, btn){
+    inventoryFilter = mode;
+    document.querySelectorAll('#page-inventory .chip').forEach(c=>c.classList.remove('on'));
+    btn.classList.add('on');
+    renderInventoryTable();
+  }
+
+  function renderInventoryKpis(){
+    const scoped = inventoryItems.filter(inSite);
+    const low = scoped.filter(i=>{ const m=inventoryStatusMeta(i); return m.cls==='iso'; }).length;
+    const empty = scoped.filter(i=>{ const m=inventoryStatusMeta(i); return m.cls==='off'; }).length;
+    const totalUnits = scoped.reduce((sum,i)=> sum + Number(i.quantity||0), 0);
+
+    const set = (id, val)=>{ const el=document.getElementById(id); if(el) el.textContent = val; };
+    set('iv-kpi-total', scoped.length);
+    set('iv-kpi-low', low);
+    set('iv-kpi-empty', empty);
+    set('iv-kpi-units', totalUnits);
+  }
+
+  function renderInventoryTable(){
+    const tb = document.getElementById('inventory-tbody'); if(!tb) return;
+    tb.innerHTML = '';
+    inventoryItems.filter(inSite).filter(i=>{
+        const meta = inventoryStatusMeta(i);
+        if(inventoryFilter==='low') return meta.cls==='iso';
+        if(inventoryFilter==='empty') return meta.cls==='off';
+        return true;
+      })
+      .slice().sort((a,b)=> (a.name||'').localeCompare(b.name||''))
+      .forEach(item=>{
+        const meta = inventoryStatusMeta(item);
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td data-label="Nama Barang"><strong>${item.name || '—'}</strong>${item.notes ? `<div class="ig-label">${item.notes}</div>` : ''}</td>
+          <td data-label="Kategori">${inventoryCategoryLabel[item.category] || item.category || '—'}</td>
+          <td class="mono-cell" data-label="SKU">${item.sku || '—'}</td>
+          <td class="mono-cell" data-label="Server">${siteName(item.site_id)}</td>
+          <td data-label="Stok">
+            <div style="display:flex; align-items:center; gap:6px;">
+              <button class="btn btn-ghost" style="width:auto; padding:2px 8px; font-size:13px;" onclick="adjustStock('${item.id}', -1)">−</button>
+              <span class="mono-cell" style="min-width:28px; text-align:center; display:inline-block;">${item.quantity} ${item.unit||''}</span>
+              <button class="btn btn-ghost" style="width:auto; padding:2px 8px; font-size:13px;" onclick="adjustStock('${item.id}', 1)">+</button>
+            </div>
+          </td>
+          <td class="mono-cell" data-label="Min. Stok">${item.min_stock}</td>
+          <td data-label="Status"><span class="badge ${meta.cls}"><span class="sw" style="background:${meta.cls==='on'?'var(--on)':meta.cls==='off'?'var(--off)':'var(--iso)'}"></span>${meta.label}</span></td>
+          <td>
+            <button class="btn btn-ghost" style="width:auto; padding:5px 10px; font-size:12px;" onclick="openInventoryModal('edit','${item.id}')">Edit</button>
+            <button class="btn btn-ghost" style="width:auto; padding:5px 10px; font-size:12px;" onclick="deleteInventoryItem('${item.id}')">Hapus</button>
+          </td>
+        `;
+        tb.appendChild(tr);
+      });
+    if(!tb.children.length){
+      tb.innerHTML = '<tr><td colspan="8" class="empty-note">Tidak ada barang untuk filter ini</td></tr>';
+    }
+  }
+
+  function renderInventoryPage(){
+    renderInventoryKpis();
+    renderInventoryTable();
+  }
+
+  async function adjustStock(id, delta){
+    const item = inventoryItems.find(i=>i.id===id); if(!item) return;
+    const newQty = Math.max(0, Number(item.quantity||0) + delta);
+    const { error } = await sb.from('inventory_items').update({ quantity: newQty }).eq('id', id);
+    if(error){ showToast('Gagal mengubah stok: ' + error.message); return; }
+    item.quantity = newQty;
+    renderInventoryPage();
+  }
+
+  function populateInventorySiteSelect(selectedSiteId){
+    const sel = document.getElementById('iv-site');
+    sel.innerHTML = sites.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+    sel.value = selectedSiteId || (currentSite!=='all' ? currentSite : (sites[0] && sites[0].id) || '');
+  }
+
+  function openInventoryModal(mode, refId){
+    editingInventoryId = mode==='edit' ? refId : null;
+    const item = mode==='edit' ? inventoryItems.find(i=>i.id===refId) : null;
+
+    document.getElementById('iv-modal-title').textContent = mode==='edit' ? 'Edit Barang' : 'Tambah Barang';
+    document.getElementById('iv-name').value = item ? item.name : '';
+    document.getElementById('iv-category').value = item ? (item.category||'lainnya') : 'ont';
+    document.getElementById('iv-sku').value = item ? (item.sku||'') : '';
+    document.getElementById('iv-unit').value = item ? (item.unit||'pcs') : 'pcs';
+    document.getElementById('iv-quantity').value = item ? item.quantity : 0;
+    document.getElementById('iv-min-stock').value = item ? item.min_stock : 5;
+    document.getElementById('iv-notes').value = item ? (item.notes||'') : '';
+    populateInventorySiteSelect(item ? item.site_id : null);
+
+    document.getElementById('inventory-modal-overlay').classList.add('open');
+  }
+  function closeInventoryModal(){
+    document.getElementById('inventory-modal-overlay').classList.remove('open');
+    editingInventoryId = null;
+  }
+
+  async function saveInventoryItem(){
+    const name = document.getElementById('iv-name').value.trim();
+    const category = document.getElementById('iv-category').value;
+    const sku = document.getElementById('iv-sku').value.trim();
+    const siteId = document.getElementById('iv-site').value;
+    const unit = document.getElementById('iv-unit').value.trim() || 'pcs';
+    const quantity = Number(document.getElementById('iv-quantity').value);
+    const minStock = Number(document.getElementById('iv-min-stock').value);
+    const notes = document.getElementById('iv-notes').value.trim();
+
+    if(!name){ showToast('Nama barang wajib diisi'); return; }
+    if(!siteId){ showToast('Pilih server terlebih dahulu'); return; }
+    if(quantity < 0 || minStock < 0){ showToast('Stok tidak boleh negatif'); return; }
+
+    const btn = document.getElementById('iv-save-btn');
+    btn.disabled = true; btn.textContent = 'Menyimpan…';
+    try {
+      const payload = { site_id: siteId, name, category, unit, quantity, min_stock: minStock };
+      if(sku) payload.sku = sku;
+      if(notes) payload.notes = notes;
+
+      let error;
+      if(editingInventoryId){
+        ({ error } = await sb.from('inventory_items').update(payload).eq('id', editingInventoryId));
+      } else {
+        ({ error } = await sb.from('inventory_items').insert(payload));
+      }
+      if(error){ showToast('Gagal menyimpan barang: ' + error.message); return; }
+
+      const { data, error: reErr } = await sb.from('inventory_items').select('*').order('name');
+      if(!reErr) inventoryItems = data || [];
+      renderInventoryPage();
+      closeInventoryModal();
+      showToast(editingInventoryId ? 'Barang diperbarui' : 'Barang ditambahkan');
+    } catch(e){
+      showToast('Terjadi kesalahan: ' + (e && e.message ? e.message : String(e)));
+    } finally {
+      btn.disabled = false; btn.textContent = 'Simpan';
+    }
+  }
+
+  async function deleteInventoryItem(id){
+    const item = inventoryItems.find(i=>i.id===id);
+    if(!confirm(`Hapus barang "${item ? item.name : ''}" dari inventory? Tindakan ini tidak bisa dibatalkan.`)) return;
+    const { error } = await sb.from('inventory_items').delete().eq('id', id);
+    if(error){ showToast('Gagal menghapus: ' + error.message); return; }
+    inventoryItems = inventoryItems.filter(i=>i.id!==id);
+    renderInventoryPage();
+    showToast('Barang dihapus');
+  }
+
+  // ---------- CRM & TIKET (tickets) ----------
+  // CATATAN SKEMA: constitution memastikan tickets terkait customer_id/node_id/technician_id
+  // dan dipakai dengan status 'open' di kode asli. Enum status lain (in_progress/resolved) &
+  // nama kolom deskripsi tidak didokumentasikan eksplisit — dibaca/ditulis toleran, dan error
+  // asli Supabase ditampilkan di toast bila nama kolom di database Anda berbeda.
+  let ticketFilter = 'all';
+  let billingFilter = 'all';
+  let topologyFilter = 'all';
+  let editingInventoryId = null;
+  let inventoryFilter = 'all';
+  function technicianName(id){ const t = technicians.find(t=>t.id===id); return t ? t.name : null; }
+  function ticketDesc(t){ return t.description || t.notes || t.title || '—'; }
+  function ticketStatusMeta(status){
+    if(status==='resolved' || status==='closed') return { cls:'on', label:'Selesai' };
+    if(status==='in_progress') return { cls:'iso', label:'Diproses' };
+    return { cls:'off', label:'Terbuka' };
+  }
+
+  function filterTickets(status, btn){
+    ticketFilter = status;
+    document.querySelectorAll('#page-tickets .chip').forEach(c=>c.classList.remove('on'));
+    btn.classList.add('on');
+    renderTicketsTable();
+  }
+
+  function renderTicketsKpis(){
+    const scoped = tickets.filter(inSite);
+    const since7d = Date.now() - 7*24*3600*1000;
+    const open = scoped.filter(t=>t.status==='open').length;
+    const inProgress = scoped.filter(t=>t.status==='in_progress').length;
+    const resolved7 = scoped.filter(t=>(t.status==='resolved'||t.status==='closed') && t.created_at && new Date(t.created_at).getTime()>=since7d).length;
+    const idSet = new Set(customers.filter(inSite).map(c=>c.id));
+    const overdueCustomers = new Set(invoices.filter(inv=>idSet.has(inv.customer_id) && inv.status==='overdue').map(inv=>inv.customer_id)).size;
+
+    const set = (id, val)=>{ const el=document.getElementById(id); if(el) el.textContent = val; };
+    set('tk-kpi-open', open);
+    set('tk-kpi-progress', inProgress);
+    set('tk-kpi-resolved', resolved7);
+    set('tk-kpi-overdue', overdueCustomers);
+  }
+
+  function renderTicketsTable(){
+    const tb = document.getElementById('tickets-tbody'); if(!tb) return;
+    tb.innerHTML = '';
+    tickets.filter(inSite).filter(t=> ticketFilter==='all' || t.status===ticketFilter).forEach(t=>{
+      const meta = ticketStatusMeta(t.status);
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td data-label="Pelanggan"><strong>${t.ticket_type==='massal' ? 'Gangguan Massal' : customerName(t.customer_id)}</strong><div class="ig-label">${ticketDesc(t)}</div></td>
+        <td data-label="Jenis">${t.ticket_type==='massal' ? 'Massal' : 'Individu'}</td>
+        <td class="mono-cell" data-label="Teknisi">${technicianName(t.technician_id) || '—'}</td>
+        <td data-label="Status"><span class="badge ${meta.cls}"><span class="sw" style="background:${meta.cls==='on'?'var(--on)':meta.cls==='off'?'var(--off)':'var(--iso)'}"></span>${meta.label}</span></td>
+        <td class="mono-cell" data-label="Dibuat">${t.created_at ? timeAgo(t.created_at) : '—'}</td>
+        <td>
+          ${t.status!=='resolved' && t.status!=='closed' ? `
+            <select onchange="updateTicketStatus('${t.id}', this.value)" style="font-size:11.5px; padding:5px 7px; border-radius:6px; border:1px solid var(--line-2);">
+              <option value="">Ubah status…</option>
+              ${t.status!=='open' ? '<option value="open">Terbuka</option>' : ''}
+              ${t.status!=='in_progress' ? '<option value="in_progress">Diproses</option>' : ''}
+              <option value="resolved">Selesai</option>
+            </select>` : ''}
+        </td>
+      `;
+      tb.appendChild(tr);
+    });
+    if(!tb.children.length){
+      tb.innerHTML = '<tr><td colspan="6" class="empty-note">Tidak ada tiket untuk filter ini</td></tr>';
+    }
+  }
+
+  function renderTicketsPage(){
+    renderTicketsKpis();
+    renderTicketsTable();
+  }
+
+  async function updateTicketStatus(id, status){
+    if(!status) return;
+    const { error } = await sb.from('tickets').update({ status }).eq('id', id);
+    if(error){ showToast('Gagal mengubah status tiket: ' + error.message); return; }
+    const t = tickets.find(t=>t.id===id); if(t) t.status = status;
+    renderTicketsPage(); renderActivityFeed();
+    if(currentCustomerId) renderDrawerCrmHistory(currentCustomerId);
+    showToast('Status tiket diperbarui');
+  }
+
+  function populateTicketSelects(prefillCustomerId){
+    const siteScopedCustomers = customers.filter(inSite);
+    const custSel = document.getElementById('tk-customer');
+    custSel.innerHTML = siteScopedCustomers.map(c=>`<option value="${c.id}">${c.name} — ${c.customer_code}</option>`).join('');
+    if(prefillCustomerId) custSel.value = prefillCustomerId;
+
+    const siteScopedTech = technicians.filter(inSite);
+    const techSel = document.getElementById('tk-technician');
+    techSel.innerHTML = '<option value="">— Belum ditugaskan —</option>' +
+      siteScopedTech.map(t=>`<option value="${t.id}">${t.name}</option>`).join('');
+  }
+
+  function openTicketModal(prefillCustomerId){
+    populateTicketSelects(prefillCustomerId);
+    document.getElementById('tk-type').value = 'individu';
+    document.getElementById('tk-description').value = '';
+    document.getElementById('ticket-modal-overlay').classList.add('open');
+  }
+  function closeTicketModal(){
+    document.getElementById('ticket-modal-overlay').classList.remove('open');
+  }
+
+  async function saveTicket(){
+    const customerId = document.getElementById('tk-customer').value;
+    const ticketType = document.getElementById('tk-type').value;
+    const technicianId = document.getElementById('tk-technician').value || null;
+    const description = document.getElementById('tk-description').value.trim();
+
+    if(!customerId){ showToast('Pilih pelanggan terlebih dahulu'); return; }
+    const cust = customers.find(c=>c.id===customerId);
+
+    const btn = document.getElementById('tk-save-btn');
+    btn.disabled = true; btn.textContent = 'Menyimpan…';
+    try {
+      const payload = { site_id: cust ? cust.site_id : currentSite, customer_id: customerId, ticket_type: ticketType, technician_id: technicianId, status: 'open' };
+      if(description) payload.description = description;
+
+      const { error } = await sb.from('tickets').insert(payload);
+      if(error){ showToast('Gagal membuat tiket: ' + error.message); return; }
+
+      const { data, error: reErr } = await sb.from('tickets').select('*').order('created_at',{ascending:false}).limit(300);
+      if(!reErr) tickets = data || [];
+      renderTicketsPage(); renderActivityFeed();
+      if(currentCustomerId) renderDrawerCrmHistory(currentCustomerId);
+      closeTicketModal();
+      showToast('Tiket dibuat');
+    } catch(e){
+      showToast('Terjadi kesalahan: ' + (e && e.message ? e.message : String(e)));
+    } finally {
+      btn.disabled = false; btn.textContent = 'Buat Tiket';
+    }
+  }
+
+  // Riwayat & Tagihan di drawer pelanggan — merangkai tickets + invoices milik pelanggan ini,
+  // reuse data yang sama dipakai renderActivityFeed()/renderTicketsPage(), tanpa fetch baru.
+  function renderDrawerCrmHistory(customerId){
+    const el = document.getElementById('d-crm-history'); if(!el) return;
+    const custTickets = tickets.filter(t=>t.customer_id===customerId)
+      .slice().sort((a,b)=> new Date(b.created_at||0) - new Date(a.created_at||0)).slice(0,4);
+    const custInvoices = invoices.filter(inv=>inv.customer_id===customerId)
+      .slice().sort((a,b)=> new Date(b.created_at||0) - new Date(a.created_at||0)).slice(0,4);
+
+    const rows = [];
+    custTickets.forEach(t=>{
+      const meta = ticketStatusMeta(t.status);
+      rows.push(`<div class="feed-row"><span class="dot" style="background:${meta.cls==='on'?'var(--on)':meta.cls==='off'?'var(--off)':'var(--iso)'}"></span><span class="who">Tiket — ${ticketDesc(t)} (${meta.label})</span><span class="when">${t.created_at?timeAgo(t.created_at):'—'}</span></div>`);
+    });
+    custInvoices.forEach(inv=>{
+      const label = inv.status==='paid' ? 'Lunas' : inv.status==='overdue' ? 'Menunggak' : 'Belum dibayar';
+      const color = inv.status==='paid' ? 'var(--on)' : inv.status==='overdue' ? 'var(--off)' : 'var(--iso)';
+      rows.push(`<div class="feed-row"><span class="dot" style="background:${color}"></span><span class="who">Invoice ${inv.period||''} — ${formatIDR(Number(inv.amount||0))} (${label})</span><span class="when">${inv.created_at?timeAgo(inv.created_at):'—'}</span></div>`);
+    });
+
+    el.innerHTML = rows.length ? rows.join('') : '<div class="feed-row"><span class="who muted">Belum ada tiket atau tagihan tercatat.</span></div>';
+  }
+
+  // ---------- BILLING ----------
+  function invoiceStatusMeta(status){
+    if(status==='paid') return { cls:'on', label:'Lunas' };
+    if(status==='overdue') return { cls:'off', label:'Menunggak' };
+    return { cls:'iso', label:'Belum Dibayar' };
+  }
+
+  function filterBilling(status, btn){
+    billingFilter = status;
+    document.querySelectorAll('#page-billing .chip').forEach(c=>c.classList.remove('on'));
+    btn.classList.add('on');
+    renderBillingTable();
+  }
+
+  function renderBillingKpis(){
+    const idSet = new Set(customers.filter(inSite).map(c=>c.id));
+    const scoped = invoices.filter(inv=>idSet.has(inv.customer_id));
+    const thisPeriod = currentPeriod(0);
+    const scopedThisPeriod = scoped.filter(inv=>inv.period===thisPeriod);
+
+    const paidThis = scopedThisPeriod.filter(inv=>inv.status==='paid');
+    const paidSum = paidThis.reduce((sum, inv)=> sum + Number(inv.amount||0), 0);
+    const unpaidCount = scopedThisPeriod.filter(inv=>inv.status==='unpaid').length;
+    const overdueList = scoped.filter(inv=>inv.status==='overdue');
+    const overdueSum = overdueList.reduce((sum, inv)=> sum + Number(inv.amount||0), 0);
+    const overdueCustomers = new Set(overdueList.map(inv=>inv.customer_id)).size;
+
+    const set = (id, val)=>{ const el=document.getElementById(id); if(el) el.textContent = val; };
+    set('bl-kpi-paid', formatIDR(paidSum));
+    set('bl-kpi-paid-sub', paidThis.length + ' invoice lunas bulan ini');
+    set('bl-kpi-unpaid', unpaidCount);
+    set('bl-kpi-overdue', formatIDR(overdueSum));
+    set('bl-kpi-overdue-customers', overdueCustomers);
+  }
+
+  function renderBillingTable(){
+    const tb = document.getElementById('billing-tbody'); if(!tb) return;
+    tb.innerHTML = '';
+    invoices.filter(inSite).filter(inv=> billingFilter==='all' || inv.status===billingFilter)
+      .slice().sort((a,b)=> new Date(b.created_at||0) - new Date(a.created_at||0))
+      .forEach(inv=>{
+        const meta = invoiceStatusMeta(inv.status);
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td data-label="Pelanggan"><strong>${customerName(inv.customer_id)}</strong></td>
+          <td class="mono-cell" data-label="Server">${siteName(inv.site_id)}</td>
+          <td class="mono-cell" data-label="Periode">${inv.period || '—'}</td>
+          <td data-label="Jumlah">${formatIDR(Number(inv.amount||0))}</td>
+          <td data-label="Status"><span class="badge ${meta.cls}"><span class="sw" style="background:${meta.cls==='on'?'var(--on)':meta.cls==='off'?'var(--off)':'var(--iso)'}"></span>${meta.label}</span></td>
+          <td class="mono-cell" data-label="Dibuat">${inv.created_at ? timeAgo(inv.created_at) : '—'}</td>
+          <td>
+            ${inv.status!=='paid' ? `
+              <select onchange="updateInvoiceStatus('${inv.id}', this.value)" style="font-size:11.5px; padding:5px 7px; border-radius:6px; border:1px solid var(--line-2);">
+                <option value="">Ubah status…</option>
+                <option value="paid">Tandai Lunas</option>
+                ${inv.status!=='overdue' ? '<option value="overdue">Tandai Menunggak</option>' : '<option value="unpaid">Tandai Belum Dibayar</option>'}
+              </select>` : ''}
+          </td>
+        `;
+        tb.appendChild(tr);
+      });
+    if(!tb.children.length){
+      tb.innerHTML = '<tr><td colspan="7" class="empty-note">Tidak ada invoice untuk filter ini</td></tr>';
+    }
+  }
+
+  function renderBillingPage(){
+    renderBillingKpis();
+    renderBillingTable();
+  }
+
+  async function updateInvoiceStatus(id, status){
+    if(!status) return;
+    const payload = { status };
+    if(status==='paid') payload.paid_at = new Date().toISOString();
+    const { error } = await sb.from('invoices').update(payload).eq('id', id);
+    if(error){ showToast('Gagal mengubah status invoice: ' + error.message); return; }
+    const inv = invoices.find(inv=>inv.id===id);
+    if(inv){ inv.status = status; if(status==='paid') inv.paid_at = payload.paid_at; }
+    renderBillingPage(); renderKPIs(); renderActivityFeed();
+    if(currentCustomerId) renderDrawerCrmHistory(currentCustomerId);
+    showToast('Status invoice diperbarui');
+  }
+
+  function populateInvoiceSelects(prefillCustomerId){
+    const siteScopedCustomers = customers.filter(inSite);
+    const custSel = document.getElementById('bl-customer');
+    custSel.innerHTML = siteScopedCustomers.map(c=>`<option value="${c.id}">${c.name} — ${c.customer_code}</option>`).join('');
+    if(prefillCustomerId) custSel.value = prefillCustomerId;
+  }
+
+  function openInvoiceModal(prefillCustomerId){
+    populateInvoiceSelects(prefillCustomerId);
+    document.getElementById('bl-period').value = currentPeriod(0);
+    document.getElementById('bl-amount').value = '';
+    document.getElementById('bl-status').value = 'unpaid';
+    document.getElementById('invoice-modal-overlay').classList.add('open');
+  }
+  function closeInvoiceModal(){
+    document.getElementById('invoice-modal-overlay').classList.remove('open');
+  }
+
+  async function saveInvoice(){
+    const customerId = document.getElementById('bl-customer').value;
+    const period = document.getElementById('bl-period').value;
+    const amount = Number(document.getElementById('bl-amount').value);
+    const status = document.getElementById('bl-status').value;
+
+    if(!customerId){ showToast('Pilih pelanggan terlebih dahulu'); return; }
+    if(!period){ showToast('Pilih periode invoice'); return; }
+    if(!amount || amount <= 0){ showToast('Isi jumlah tagihan yang valid'); return; }
+    const cust = customers.find(c=>c.id===customerId);
+
+    const btn = document.getElementById('bl-save-btn');
+    btn.disabled = true; btn.textContent = 'Menyimpan…';
+    try {
+      const payload = { site_id: cust ? cust.site_id : currentSite, customer_id: customerId, period, amount, status };
+      if(status==='paid') payload.paid_at = new Date().toISOString();
+
+      const { error } = await sb.from('invoices').insert(payload);
+      if(error){ showToast('Gagal membuat invoice: ' + error.message); return; }
+
+      const { data, error: reErr } = await sb.from('invoices').select('*').order('created_at',{ascending:false}).limit(1000);
+      if(!reErr) invoices = data || [];
+      renderBillingPage(); renderKPIs(); renderActivityFeed();
+      if(currentCustomerId) renderDrawerCrmHistory(currentCustomerId);
+      closeInvoiceModal();
+      showToast('Invoice dibuat');
+    } catch(e){
+      showToast('Terjadi kesalahan: ' + (e && e.message ? e.message : String(e)));
+    } finally {
+      btn.disabled = false; btn.textContent = 'Buat Invoice';
+    }
+  }
+
   function renderAll(){
     renderKPIs();
     renderBars();
@@ -1215,6 +2874,12 @@
     renderVoucherTable();
     renderTeamTable();
     renderAgents();
+    renderDevicesTree();
+    renderMikrotikPage();
+    renderTicketsPage();
+    renderBillingPage();
+    renderNetworkTopologyPage();
+    renderInventoryPage();
   }
 
   // ---------- INIT ----------
