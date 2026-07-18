@@ -1969,6 +1969,7 @@
       <div class="field">
         <label>Host / IP MikroTik</label>
         <input type="text" id="sm-host" placeholder="mis. 103.10.20.30 atau vpn-cabang1.internal">
+        <div class="audit-mini" style="margin-top:4px;">Isi HANYA alamat/domainnya saja — jangan sertakan port di sini (mis. kalau layanan tunnel Anda memberi "namahost:3627", tulis "namahost" di sini dan "3627" di kolom Port API di bawah). Kalau port ikut tertulis di sini, sistem akan otomatis memisahkannya untuk Anda.</div>
       </div>
       <div class="field" style="display:flex; gap:10px;">
         <div style="flex:1;">
@@ -1988,7 +1989,7 @@
       <div class="field">
         <label>Password API</label>
         <input type="password" id="sm-password" placeholder="kosongkan jika tidak ingin mengubah">
-        <div class="audit-mini" style="margin-top:4px;">Disimpan terenkripsi &amp; write-only — tidak pernah ditampilkan balik ke browser. Hanya agent sentral di VPS Anda yang bisa mendekripsinya.</div>
+        <div class="audit-mini" style="margin-top:4px;">Write-only — tidak pernah ditampilkan balik ke browser setelah disimpan, dan hanya bisa dibaca oleh agent sentral di VPS Anda (lewat service_role key, bukan browser). Disimpan sebagai teks di database (bukan terenkripsi) sehingga akses dibatasi murni lewat Row Level Security — hanya admin yang bisa melihat/mengubah baris ini.</div>
       </div>
     </div>
     <div class="modal-actions">
@@ -2616,10 +2617,31 @@
     editingSiteId = null;
   }
 
+  // 🐛 FIX (dilaporkan pengguna 18 Jul 2026): layanan tunnel (Cloudflare
+  // Tunnel, ngrok, dst) sering memberi string "domain:port" ke pengguna,
+  // yang wajar kalau dipaste apa adanya ke kolom "Host / IP MikroTik" —
+  // menghasilkan host tersimpan literal "domain:port" (mis.
+  // "id17.tunnel.my.id:3627"), sehingga saat digabung dengan Port API
+  // terpisah, tampilan jadi "id17.tunnel.my.id:3627:8728" dan koneksi
+  // sungguhan ke RouterOS API pasti gagal (hostname tidak valid, port asli
+  // dari tunnel malah terabaikan). Fungsi ini mendeteksi & memisahkan pola
+  // tsb otomatis sebelum disimpan. Sengaja tidak menyentuh literal IPv6
+  // (yang punya lebih dari satu titik dua, mis. "2001:db8::1") — regex di
+  // bawah hanya cocok untuk TEPAT SATU titik dua diikuti murni angka.
+  function parseHostPort(rawHost, fallbackPort){
+    const trimmed = (rawHost||'').trim();
+    const m = trimmed.match(/^([^:\s]+):(\d{2,5})$/);
+    if(m){
+      return { host: m[1], port: parseInt(m[2],10), extracted:true };
+    }
+    return { host: trimmed, port: fallbackPort, extracted:false };
+  }
+
   async function saveSiteConnection(){
     const name = document.getElementById('sm-name').value.trim();
-    const host = document.getElementById('sm-host').value.trim();
-    const port = parseInt(document.getElementById('sm-port').value, 10) || 8728;
+    const rawHost = document.getElementById('sm-host').value.trim();
+    const portFromField = parseInt(document.getElementById('sm-port').value, 10) || 8728;
+    const { host, port, extracted } = parseHostPort(rawHost, portFromField);
     const useTls = document.getElementById('sm-tls').checked;
     const username = document.getElementById('sm-username').value.trim();
     const password = document.getElementById('sm-password').value;
@@ -2645,7 +2667,11 @@
       if(!reErr) sites = data || [];
       renderAgents(); renderAgents('mikrotik-agents-container'); populateSiteSwitcher();
       closeSiteModal();
-      showToast(editingSiteId ? 'Koneksi server diperbarui' : 'Server ditambahkan — klik "Tes Koneksi" untuk memverifikasi agent bisa login ke router');
+      if(extracted){
+        showToast(`Port ${port} terdeteksi ikut tertulis di kolom Host — sudah otomatis dipisahkan (Host disimpan sebagai "${host}"). Klik "Tes Koneksi" untuk memverifikasi.`);
+      } else {
+        showToast(editingSiteId ? 'Koneksi server diperbarui' : 'Server ditambahkan — klik "Tes Koneksi" untuk memverifikasi agent bisa login ke router');
+      }
     } catch(e){
       showToast('Terjadi kesalahan: ' + (e && e.message ? e.message : String(e)));
     } finally {
