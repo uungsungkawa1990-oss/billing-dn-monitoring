@@ -717,6 +717,18 @@
           <h2>Pelanggan</h2>
           <p>Data pelanggan, akses jaringan, dan kredensial PPPoE.</p>
         </div>
+        <div class="device-toolbar">
+          <button class="btn btn-primary" style="width:auto; padding:9px 16px;" onclick="openCustomerModal()">+ Tambah Pelanggan</button>
+        </div>
+        <div class="card-head" style="margin-bottom:10px;"><h3>Akun PPPoE Ditemukan di Router</h3><span class="muted">mikrotik_ppp_secrets · belum terhubung ke data Pelanggan</span></div>
+        <div class="table-wrap" style="margin-bottom:22px;">
+          <table>
+            <thead>
+              <tr><th>Server</th><th>Username</th><th>Profile</th><th>Status</th><th></th></tr>
+            </thead>
+            <tbody id="ppp-unlinked-tbody"></tbody>
+          </table>
+        </div>
         <div class="table-wrap">
           <table>
             <thead>
@@ -878,6 +890,19 @@
 
         <div class="card-head" style="margin-bottom:10px;"><h3>Status Agent per Server</h3><span class="muted">heartbeat</span></div>
         <div id="mikrotik-agents-container" style="display:flex; flex-direction:column; gap:14px; margin-bottom:22px;"></div>
+
+        <div class="card-head" style="margin-bottom:10px;"><h3>Data Live Router</h3><span class="muted">site_live_stats · disinkron ±30 detik</span></div>
+        <div id="mikrotik-live-stats-container" style="display:flex; flex-direction:column; gap:14px; margin-bottom:22px;"></div>
+
+        <div class="card-head" style="margin-bottom:10px;"><h3>Sesi PPPoE Aktif</h3><span class="muted">mikrotik_ppp_active</span></div>
+        <div class="table-wrap" style="margin-bottom:22px;">
+          <table>
+            <thead>
+              <tr><th>Server</th><th>Username</th><th>IP Address</th><th>Uptime</th><th>Caller ID</th></tr>
+            </thead>
+            <tbody id="mikrotik-ppp-active-tbody"></tbody>
+          </table>
+        </div>
 
         <div class="card-head" style="margin-bottom:10px;"><h3>Antrean Perintah</h3><span class="muted">mikrotik_commands</span></div>
         <div class="table-wrap">
@@ -1999,6 +2024,66 @@
   </div>
 </div>
 
+<!-- CUSTOMER MODAL -->
+<div class="modal-overlay" id="customer-modal-overlay" onclick="if(event.target===this) closeCustomerModal()">
+  <div class="modal-box">
+    <div class="modal-head">
+      <h3>Tambah Pelanggan</h3>
+      <button class="drawer-close" onclick="closeCustomerModal()">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <label>Server</label>
+        <select id="cu-site"></select>
+      </div>
+      <div class="field">
+        <label>Nama Pelanggan</label>
+        <input type="text" id="cu-name" placeholder="mis. Budi Santoso">
+      </div>
+      <div class="field">
+        <label>ID Pelanggan</label>
+        <input type="text" id="cu-code" placeholder="mis. CUST-0001">
+      </div>
+      <div class="field">
+        <label>Alamat (opsional)</label>
+        <input type="text" id="cu-address" placeholder="mis. Jl. Merdeka No. 12">
+      </div>
+      <div class="field">
+        <label>Jenis Akses</label>
+        <select id="cu-access">
+          <option value="LAN_HUB">LAN / Hub (MikroTik PPPoE)</option>
+          <option value="OLT_GPON">OLT / GPON</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Paket</label>
+        <input type="text" id="cu-package" placeholder="mis. 20Mbps">
+      </div>
+      <div class="field">
+        <label>Username PPPoE</label>
+        <input type="text" id="cu-username" placeholder="mis. budi.santoso">
+        <div class="audit-mini" style="margin-top:4px;" id="cu-username-note">Kalau username ini SUDAH ADA sebagai PPP Secret di router, sistem hanya menautkan datanya — tidak membuat ulang. Kalau BELUM ada, centang opsi di bawah untuk membuatnya otomatis.</div>
+      </div>
+      <div class="field" id="cu-create-account-field">
+        <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+          <input type="checkbox" id="cu-create-account" style="width:auto;" onchange="document.getElementById('cu-password-field').style.display=this.checked?'':'none'">
+          Buat akun PPPoE baru di router sekarang
+        </label>
+      </div>
+      <div class="field" id="cu-password-field" style="display:none;">
+        <label>Password PPPoE</label>
+        <input type="password" id="cu-password" placeholder="Password untuk akun baru">
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeCustomerModal()">Batal</button>
+      <button class="btn btn-primary" id="cu-save-btn" onclick="saveCustomer()">Simpan</button>
+    </div>
+  </div>
+</div>
+
 <!-- GENIEACS WIFI MODAL -->
 <div class="modal-overlay" id="ga-wifi-modal-overlay" onclick="if(event.target===this) closeGaWifiModal()">
   <div class="modal-box">
@@ -2062,6 +2147,9 @@
   let allProfiles = [];
   let networkNodes = [];
   let mikrotikCommands = [];
+  let siteLiveStats = [];       // site_live_stats: CPU/RAM/disk/uptime per server (Monitoring MikroTik)
+  let pppActiveSessions = [];   // mikrotik_ppp_active: sesi PPPoE yang sedang connect
+  let pppSecrets = [];          // mikrotik_ppp_secrets: akun PPPoE apa adanya di router (termasuk yang belum jadi Customer)
   let notifications = [];
   let notificationReads = [];
   let currentUserId = null;
@@ -2179,7 +2267,7 @@
   // ---------- FETCH ----------
   async function fetchAll(){
     const since24h = new Date(Date.now() - 24*3600*1000).toISOString();
-    const [sRes, cRes, tRes, vRes, invRes, logRes, tkRes, ndRes, mkRes, ivRes, woRes, exRes, prRes, ntRes, nrRes, itgRes, itgLogRes, aiRes, gaRes, gaCfgRes] = await Promise.all([
+    const [sRes, cRes, tRes, vRes, invRes, logRes, tkRes, ndRes, mkRes, ivRes, woRes, exRes, prRes, ntRes, nrRes, itgRes, itgLogRes, aiRes, gaRes, gaCfgRes, slsRes, ppaRes, ppsRes] = await Promise.all([
       sb.from('sites').select('*').order('name'),
       sb.from('customers').select('*').order('name'),
       sb.from('technicians').select('*').order('name'),
@@ -2199,7 +2287,10 @@
       sb.from('integration_logs').select('*').order('created_at', {ascending:false}).limit(200),
       sb.from('ai_insights').select('*').order('created_at', {ascending:false}).limit(200),
       sb.from('genieacs_devices').select('*').order('updated_at', {ascending:false}),
-      sb.from('genieacs_config').select('*').limit(1)
+      sb.from('genieacs_config').select('*').limit(1),
+      sb.from('site_live_stats').select('*'),
+      sb.from('mikrotik_ppp_active').select('*'),
+      sb.from('mikrotik_ppp_secrets').select('*').order('username')
     ]);
     sites = sRes.data || [];
     customers = cRes.data || [];
@@ -2228,6 +2319,12 @@
     genieacsDevices = gaRes.data || [];
     // genieacs_config: RLS admin-only select — non-admin dapat array kosong (bukan error), normal.
     genieacsConfig = (gaCfgRes.data && gaCfgRes.data[0]) || null;
+    siteLiveStats = slsRes.data || [];
+    pppActiveSessions = ppaRes.data || [];
+    pppSecrets = ppsRes.data || [];
+    if(slsRes.error) console.error('site_live_stats:', slsRes.error);
+    if(ppaRes.error) console.error('mikrotik_ppp_active:', ppaRes.error);
+    if(ppsRes.error) console.error('mikrotik_ppp_secrets:', ppsRes.error);
     if(gaRes.error) console.error('genieacs_devices:', gaRes.error);
     if(sRes.error) console.error(sRes.error);
     if(cRes.error) console.error(cRes.error);
@@ -2303,6 +2400,25 @@
         if(error){ console.error('genieacs_devices:', error); return; }
         genieacsDevices = data || [];
         renderGenieAcsPage();
+      })
+      .on('postgres_changes', {event:'*', schema:'public', table:'site_live_stats'}, async ()=>{
+        const { data, error } = await sb.from('site_live_stats').select('*');
+        if(error){ console.error('site_live_stats:', error); return; }
+        siteLiveStats = data || [];
+        renderMikrotikPage();
+      })
+      .on('postgres_changes', {event:'*', schema:'public', table:'mikrotik_ppp_active'}, async ()=>{
+        const { data, error } = await sb.from('mikrotik_ppp_active').select('*');
+        if(error){ console.error('mikrotik_ppp_active:', error); return; }
+        pppActiveSessions = data || [];
+        renderMikrotikPage();
+      })
+      .on('postgres_changes', {event:'*', schema:'public', table:'mikrotik_ppp_secrets'}, async ()=>{
+        const { data, error } = await sb.from('mikrotik_ppp_secrets').select('*').order('username');
+        if(error){ console.error('mikrotik_ppp_secrets:', error); return; }
+        pppSecrets = data || [];
+        renderMikrotikPage();
+        renderCustomerTable(document.getElementById('global-search').value);
       })
       .on('postgres_changes', {event:'*', schema:'public', table:'inventory_items'}, async ()=>{
         const { data, error } = await sb.from('inventory_items').select('*').order('name');
@@ -2513,6 +2629,7 @@
   }
 
   function renderCustomerTable(filter=''){
+    renderUnlinkedPppSecrets();
     const tb = document.getElementById('customers-tbody'); tb.innerHTML='';
     const q = filter.toLowerCase();
     customers.filter(inSite).filter(c=> !q || c.name.toLowerCase().includes(q) || c.customer_code.toLowerCase().includes(q))
@@ -2574,9 +2691,10 @@
           <div><div class="ig-label">Router terhubung</div>${s.router_summary||'—'}</div>
           <div><div class="ig-label">Tes koneksi terakhir</div><span class="badge ${testMeta.cls}"><span class="sw" style="background:${testMeta.cls==='on'?'var(--on)':testMeta.cls==='off'?'var(--off)':'var(--iso)'}"></span>${testMeta.label}</span>${s.last_test_message?`<div class="ig-label" style="margin-top:3px;">${s.last_test_message}</div>`:''}</div>
         </div>
-        <div style="display:flex; gap:8px; margin-top:12px;">
+        <div style="display:flex; gap:8px; margin-top:12px; flex-wrap:wrap;">
           <button class="btn btn-ghost" style="width:auto; padding:7px 12px; font-size:11.5px;" onclick="openSiteModal('${s.id}')">Edit Koneksi</button>
           <button class="btn btn-ghost" style="width:auto; padding:7px 12px; font-size:11.5px;" onclick="testSiteConnection('${s.id}')" ${s.host?'':'disabled'}>Tes Koneksi</button>
+          <button class="btn btn-ghost" style="width:auto; padding:7px 12px; font-size:11.5px; color:var(--off); border-color:var(--off);" onclick="confirmDeleteSite('${s.id}','${(s.name||'').replace(/'/g,"\\'")}')">Hapus</button>
         </div>
       `;
       el.appendChild(card);
@@ -2683,6 +2801,136 @@
     const { error } = await sb.rpc('queue_mikrotik_test', { p_site_id: siteId });
     if(error){ showToast('Gagal mengantre tes koneksi: ' + error.message); return; }
     showToast('Tes koneksi dikirim ke agent — hasil muncul di kartu server dalam beberapa detik');
+  }
+
+  // ---------- CUSTOMER CRUD (Tambah Pelanggan + Impor dari MikroTik) ----------
+  function openCustomerModal(prefillUsername, prefillSiteId){
+    const sel = document.getElementById('cu-site');
+    sel.innerHTML = '';
+    sites.forEach(s=>{
+      const opt = document.createElement('option');
+      opt.value = s.id; opt.textContent = s.name;
+      sel.appendChild(opt);
+    });
+    if(prefillSiteId) sel.value = prefillSiteId;
+    else if(currentSite!=='all') sel.value = currentSite;
+
+    document.getElementById('cu-name').value = '';
+    document.getElementById('cu-code').value = '';
+    document.getElementById('cu-address').value = '';
+    document.getElementById('cu-access').value = 'LAN_HUB';
+    document.getElementById('cu-package').value = '';
+    document.getElementById('cu-username').value = prefillUsername || '';
+    document.getElementById('cu-create-account').checked = false;
+    document.getElementById('cu-password-field').style.display = 'none';
+    document.getElementById('cu-password').value = '';
+
+    if(prefillUsername){
+      document.getElementById('cu-create-account-field').style.display = 'none';
+      document.getElementById('cu-username-note').textContent = 'Username ini sudah ditemukan sebagai PPP Secret di router — akan ditautkan langsung, tidak dibuat ulang.';
+    } else {
+      document.getElementById('cu-create-account-field').style.display = '';
+      document.getElementById('cu-username-note').textContent = 'Kalau username ini SUDAH ADA sebagai PPP Secret di router, sistem hanya menautkan datanya — tidak membuat ulang. Kalau BELUM ada, centang opsi di bawah untuk membuatnya otomatis.';
+    }
+
+    document.getElementById('customer-modal-overlay').classList.add('open');
+  }
+  function closeCustomerModal(){
+    document.getElementById('customer-modal-overlay').classList.remove('open');
+  }
+
+  async function saveCustomer(){
+    const siteId = document.getElementById('cu-site').value;
+    const name = document.getElementById('cu-name').value.trim();
+    const code = document.getElementById('cu-code').value.trim();
+    const address = document.getElementById('cu-address').value.trim();
+    const accessType = document.getElementById('cu-access').value;
+    const pkg = document.getElementById('cu-package').value.trim();
+    const username = document.getElementById('cu-username').value.trim();
+    const createAccount = document.getElementById('cu-create-account').checked;
+    const password = document.getElementById('cu-password').value;
+
+    if(!siteId){ showToast('Pilih server terlebih dahulu'); return; }
+    if(!name || !code){ showToast('Nama dan ID Pelanggan wajib diisi'); return; }
+    if(createAccount && !password){ showToast('Isi password untuk membuat akun PPPoE baru'); return; }
+
+    const btn = document.getElementById('cu-save-btn');
+    btn.disabled = true; btn.textContent = 'Menyimpan…';
+    try {
+      const payload = {
+        site_id: siteId, customer_code: code, name, address: address || null,
+        access_type: accessType, package: pkg || null,
+        pppoe_username: username || null,
+        pppoe_password: createAccount ? password : null,
+        status: 'Aktif'
+      };
+      const { data: inserted, error } = await sb.from('customers').insert(payload).select().single();
+      if(error){ showToast('Gagal menyimpan pelanggan: ' + error.message); return; }
+
+      // Kalau username cocok dengan akun yang sudah ditemukan di router, tautkan
+      if(username){
+        await sb.from('mikrotik_ppp_secrets').update({ linked_customer_id: inserted.id })
+          .eq('site_id', siteId).eq('username', username);
+      }
+      // Kalau admin minta buat akun baru di router, antre lewat jalur resmi
+      if(createAccount && username){
+        const { error: cpErr } = await sb.rpc('create_pppoe_account', {
+          p_customer_id: inserted.id, p_username: username, p_password: password
+        });
+        if(cpErr) showToast('Pelanggan tersimpan, tapi gagal antre pembuatan akun PPPoE: ' + cpErr.message);
+      }
+
+      const { data, error: reErr } = await sb.from('customers').select('*').order('name');
+      if(!reErr) customers = data || [];
+      const { data: pps } = await sb.from('mikrotik_ppp_secrets').select('*').order('username');
+      pppSecrets = pps || [];
+      renderCustomerTable(document.getElementById('global-search').value);
+      closeCustomerModal();
+      showToast('Pelanggan berhasil ditambahkan' + (createAccount ? ' — akun PPPoE akan dibuat di router dalam beberapa detik' : ''));
+    } catch(e){
+      showToast('Terjadi kesalahan: ' + (e && e.message ? e.message : String(e)));
+    } finally {
+      btn.disabled = false; btn.textContent = 'Simpan';
+    }
+  }
+
+  function renderUnlinkedPppSecrets(){
+    const tb = document.getElementById('ppp-unlinked-tbody'); if(!tb) return;
+    tb.innerHTML = '';
+    const scoped = pppSecrets.filter(p => !p.linked_customer_id && (currentSite==='all' || p.site_id===currentSite));
+    scoped.forEach(p=>{
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td class="mono-cell" data-label="Server">${siteName(p.site_id).split(' — ')[0]}</td>
+        <td data-label="Username"><strong>${p.username}</strong></td>
+        <td data-label="Profile">${p.profile || '—'}</td>
+        <td data-label="Status"><span class="badge ${p.is_disabled?'off':'on'}"><span class="sw" style="background:${p.is_disabled?'var(--off)':'var(--on)'}"></span>${p.is_disabled?'Nonaktif':'Aktif'}</span></td>
+        <td><button class="row-link" onclick="openCustomerModal('${p.username.replace(/'/g,"\\'")}','${p.site_id}')">Jadikan Pelanggan →</button></td>
+      `;
+      tb.appendChild(tr);
+    });
+    if(!scoped.length){
+      tb.innerHTML = '<tr><td colspan="5" class="empty-note">Semua akun PPPoE di router sudah terhubung ke data Pelanggan</td></tr>';
+    }
+  }
+
+  async function confirmDeleteSite(siteId, siteName){
+    const typed = prompt(`⚠️ PERINGATAN: menghapus server ini akan MENGHAPUS SEMUA data terkait —\npelanggan, teknisi, voucher, topologi, dan riwayat perintah di server "${siteName}".\nTindakan ini TIDAK BISA dibatalkan.\n\nKetik persis "${siteName}" untuk konfirmasi hapus:`);
+    if(typed === null) return;
+    if(typed.trim() !== siteName.trim()){
+      showToast('Nama tidak cocok — penghapusan dibatalkan');
+      return;
+    }
+    try {
+      const { error } = await sb.rpc('delete_site', { p_site_id: siteId });
+      if(error){ showToast('Gagal menghapus server: ' + error.message); return; }
+      const { data, error: reErr } = await sb.from('sites').select('*').order('name');
+      if(!reErr) sites = data || [];
+      renderAgents(); renderAgents('mikrotik-agents-container');
+      showToast(`Server "${siteName}" berhasil dihapus`);
+    } catch(e){
+      showToast('Terjadi kesalahan: ' + (e && e.message ? e.message : String(e)));
+    }
   }
 
   // ---------- GENIEACS ----------
@@ -2871,6 +3119,63 @@
     renderMikrotikKpis();
     renderMikrotikQueue();
     renderAgents('mikrotik-agents-container');
+    renderMikrotikLiveStats();
+    renderPppActiveTable();
+  }
+
+  function renderMikrotikLiveStats(){
+    const el = document.getElementById('mikrotik-live-stats-container'); if(!el) return;
+    el.innerHTML = '';
+    const relevantSites = currentSite==='all' ? sites : sites.filter(s=>s.id===currentSite);
+    relevantSites.forEach(s=>{
+      const stat = siteLiveStats.find(x=>x.site_id===s.id);
+      const card = document.createElement('div');
+      card.className = 'card';
+      if(!stat){
+        card.innerHTML = `
+          <div class="card-head"><h3>${s.name}</h3><span class="muted">belum ada data</span></div>
+          <div class="empty-note">Menunggu siklus heartbeat pertama dari agent (±30 detik setelah router terhubung).</div>
+        `;
+        el.appendChild(card);
+        return;
+      }
+      card.innerHTML = `
+        <div class="card-head"><h3>${s.name}</h3><span class="muted">${stat.updated_at ? timeAgo(stat.updated_at) : '—'}</span></div>
+        <div class="info-grid">
+          <div><div class="ig-label">CPU Load</div>${stat.cpu_load!=null ? stat.cpu_load+'%' : '—'}</div>
+          <div><div class="ig-label">Memory Terpakai</div>${stat.memory_used_percent!=null ? stat.memory_used_percent+'%' : '—'}</div>
+          <div><div class="ig-label">Disk Terpakai</div>${stat.disk_used_percent!=null ? stat.disk_used_percent+'%' : '—'}</div>
+          <div><div class="ig-label">Uptime Router</div>${stat.uptime || '—'}</div>
+          <div><div class="ig-label">Board</div>${stat.board_name || '—'}</div>
+          <div><div class="ig-label">PPPoE Aktif</div>${stat.ppp_active_count}</div>
+          <div><div class="ig-label">Hotspot Aktif</div>${stat.hotspot_active_count}</div>
+        </div>
+      `;
+      el.appendChild(card);
+    });
+    if(!relevantSites.length){
+      el.innerHTML = '<div class="empty-note">Belum ada server terdaftar</div>';
+    }
+  }
+
+  function renderPppActiveTable(){
+    const tb = document.getElementById('mikrotik-ppp-active-tbody'); if(!tb) return;
+    tb.innerHTML = '';
+    const scoped = pppActiveSessions.filter(a => currentSite==='all' || a.site_id===currentSite);
+    scoped.forEach(a=>{
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td class="mono-cell" data-label="Server">${siteName(a.site_id).split(' — ')[0]}</td>
+        <td data-label="Username"><strong>${a.username}</strong></td>
+        <td class="mono-cell" data-label="IP Address">${a.address || '—'}</td>
+        <td data-label="Uptime">${a.uptime || '—'}</td>
+        <td class="mono-cell" data-label="Caller ID">${a.caller_id || '—'}</td>
+      `;
+      tb.appendChild(tr);
+    });
+    if(!scoped.length){
+      tb.innerHTML = '<tr><td colspan="5" class="empty-note">Tidak ada sesi PPPoE aktif di server ini</td></tr>';
+    }
   }
 
   function renderVoucherTable(){
