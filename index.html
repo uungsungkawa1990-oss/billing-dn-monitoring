@@ -2763,9 +2763,10 @@
           <div><div class="ig-label">Router terhubung</div>${s.router_summary||'—'}</div>
           <div><div class="ig-label">Tes koneksi terakhir</div><span class="badge ${testMeta.cls}"><span class="sw" style="background:${testMeta.cls==='on'?'var(--on)':testMeta.cls==='off'?'var(--off)':'var(--iso)'}"></span>${testMeta.label}</span>${s.last_test_message?`<div class="ig-label" style="margin-top:3px;">${s.last_test_message}</div>`:''}</div>
         </div>
-        <div style="display:flex; gap:8px; margin-top:12px;">
+        <div style="display:flex; gap:8px; margin-top:12px; flex-wrap:wrap;">
           <button class="btn btn-ghost" style="width:auto; padding:7px 12px; font-size:11.5px;" onclick="openSiteModal('${s.id}')">Edit Koneksi</button>
           <button class="btn btn-ghost" style="width:auto; padding:7px 12px; font-size:11.5px;" onclick="testSiteConnection('${s.id}')" ${s.host?'':'disabled'}>Tes Koneksi</button>
+          <button class="btn btn-ghost" style="width:auto; padding:7px 12px; font-size:11.5px; color:var(--off); border-color:var(--off);" onclick="confirmDeleteSite('${s.id}')">Hapus</button>
         </div>
       `;
       el.appendChild(card);
@@ -2941,6 +2942,24 @@
     const { error } = await sb.rpc('queue_mikrotik_test', { p_site_id: siteId });
     if(error){ showToast('Gagal mengantre tes koneksi: ' + error.message); return; }
     showToast('Tes koneksi dikirim ke agent — hasil muncul di kartu server dalam beberapa detik');
+  }
+
+  async function confirmDeleteSite(siteId){
+    const s = sites.find(s=>s.id===siteId);
+    if(!s) return;
+    const custCount = customers.filter(c=>c.site_id===siteId).length;
+    const warnCust = custCount ? `\n\n⚠️ Server ini masih punya ${custCount} data pelanggan — semuanya IKUT TERHAPUS.` : '';
+    const typed = prompt(`Menghapus server "${s.name}" tidak bisa dibatalkan.${warnCust}\n\nKetik persis "${s.name}" untuk konfirmasi hapus:`);
+    if(typed === null) return;
+    if(typed.trim() !== s.name.trim()){ showToast('Nama tidak cocok — penghapusan dibatalkan'); return; }
+
+    const { error } = await sb.rpc('delete_site', { p_site_id: siteId });
+    if(error){ showToast('Gagal menghapus server: ' + error.message); return; }
+
+    const { data, error: reErr } = await sb.from('sites').select('*').order('name');
+    if(!reErr) sites = data || [];
+    renderAgents('agents-container'); renderAgents('mikrotik-agents-container');
+    showToast(`Server "${s.name}" berhasil dihapus`);
   }
 
   // ---------- GENIEACS ----------
