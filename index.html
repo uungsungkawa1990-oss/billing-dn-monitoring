@@ -376,6 +376,7 @@
   .topo-node-box text.topo-title{ font-family:var(--body); font-size:11px; font-weight:600; fill:var(--ink); }
   .topo-node-box text.topo-sub{ font-family:var(--mono); font-size:9.5px; fill:var(--ink-3); }
   .topo-link{ stroke:var(--line-2); stroke-width:1.6; fill:none; }
+  .topo-traffic-label{ font-family:var(--mono); font-size:9.5px; fill:var(--wire-blue); }
   .topo-node-box.health-ok rect{ stroke:var(--on); stroke-width:1.8; }
   .topo-node-box.health-warn rect{ stroke:var(--iso); stroke-width:2; }
   .topo-node-box.health-bad rect{ stroke:var(--off); stroke-width:2; }
@@ -1628,6 +1629,7 @@
           <option value="hub">Hub (lama)</option>
           <option value="splitter">Splitter (lama)</option>
         </select>
+        <div class="audit-mini" id="dm-htb-hint" style="display:none; margin-top:4px;">HTB BOLEH berdiri sendiri sebagai titik akhir ke satu pelanggan — TIDAK wajib selalu berpasangan pemancar+penerima. Hubungkan langsung ke pelanggan lewat kolom "Pelanggan Terhubung" di bawah; tambahkan HTB kedua hanya kalau memang ada unit fisik relainya di lokasi lain.</div>
       </div>
       <div class="field">
         <label>Status Posisi</label>
@@ -1656,13 +1658,50 @@
         <label>Dari Port Induk (Output) — opsional</label>
         <input type="text" id="dm-parent-port" list="dm-parent-port-options" placeholder="mis. LAN 4, FO A-2">
         <datalist id="dm-parent-port-options"></datalist>
+        <div class="audit-mini" id="dm-port-conflict-hint" style="margin-top:4px;">Satu port di perangkat induk yang sama hanya boleh dipakai satu perangkat anak — akan ditolak otomatis kalau bentrok.</div>
       </div>
       <div class="field">
         <label>Alamat IP — opsional</label>
         <input type="text" id="dm-ip" placeholder="mis. 10.10.1.1">
       </div>
-      <input type="hidden" id="dm-lat">
-      <input type="hidden" id="dm-lng">
+      <div class="field">
+        <label>Pelanggan Terhubung — opsional</label>
+        <select id="dm-customer">
+          <option value="">— Tidak ada / bukan titik pelanggan —</option>
+        </select>
+        <div class="audit-mini" style="margin-top:4px;">Pakai ini kalau perangkat ini adalah titik akhir ke SATU pelanggan tertentu (mis. HTB atau router di rumah pelanggan) — tidak perlu bikin perangkat tambahan cuma untuk "mewakili" pelanggan. Untuk ODP yang dipakai banyak pelanggan sekaligus, biarkan kosong di sini.</div>
+      </div>
+      <div class="field">
+        <label>Interface MikroTik — opsional, untuk trafik OTOMATIS</label>
+        <input type="text" id="dm-mikrotik-interface" placeholder="mis. ether5 (persis nama interface di router)" oninput="onDeviceMikrotikInterfaceChange()">
+        <div class="audit-mini" style="margin-top:4px;">Isi HANYA kalau perangkat ini adalah router MikroTik itu sendiri dan Anda tahu persis nama interface uplink-nya (cek di Winbox → Interface). Kalau diisi, 2 kolom trafik di bawah akan otomatis diperbarui terus oleh agent tiap ±20 detik — TIDAK bisa diketik manual lagi selama field ini terisi. Untuk HTB/splitter pasif yang bukan MikroTik, biarkan kosong dan isi trafik manual seperti biasa.</div>
+      </div>
+      <div class="field" style="display:flex; gap:10px;">
+        <div style="flex:1;">
+          <label>Trafik Download (Mbps) — opsional, manual</label>
+          <input type="number" step="any" min="0" id="dm-traffic-down" placeholder="mis. 74.3">
+        </div>
+        <div style="flex:1;">
+          <label>Trafik Upload (Mbps) — opsional, manual</label>
+          <input type="number" step="any" min="0" id="dm-traffic-up" placeholder="mis. 4.6">
+        </div>
+      </div>
+      <div class="audit-mini" style="margin-top:-8px;">Untuk HTB/splitter/hub: kalau sudah ada pelanggan yang di-link ke node ini atau turunannya (field "Pelanggan Terhubung" di atas), trafik di diagram topologi OTOMATIS dari jumlah trafik pelanggan-pelanggan itu — 2 kolom manual di atas hanya jadi fallback selama belum ada pelanggan yang di-link.</div>
+      <div class="field" style="display:flex; gap:10px;">
+        <div style="flex:1;">
+          <label>Latitude — opsional</label>
+          <input type="number" step="any" id="dm-lat" placeholder="mis. -6.914744" oninput="onDeviceLatLngTyped()">
+        </div>
+        <div style="flex:1;">
+          <label>Longitude — opsional</label>
+          <input type="number" step="any" id="dm-lng" placeholder="mis. 107.609810" oninput="onDeviceLatLngTyped()">
+        </div>
+      </div>
+      <div class="field">
+        <label>Atau tempel koordinat dari Google Maps — opsional</label>
+        <input type="text" id="dm-latlng-paste" placeholder="tempel di sini, mis. -6.914744, 107.609810" oninput="onDeviceLatLngPaste()">
+        <div class="audit-mini" style="margin-top:4px;">Buka lokasi di Google Maps → tekan lama titiknya → salin koordinat yang muncul → tempel di sini. Tetap bisa isi manual di kolom Latitude/Longitude, atau geser pin di peta seperti biasa — tidak wajib pakai peta lagi.</div>
+      </div>
       <div class="audit-mini" id="dm-position-hint">Posisi di peta belum ditentukan — akan ditempatkan di tengah peta, geser untuk mengatur lokasi sebenarnya.</div>
     </div>
     <div class="modal-actions">
@@ -3215,6 +3254,40 @@
     return levels;
   }
 
+  // Trafik untuk node yang BUKAN router MikroTik langsung (HTB, splitter, hub,
+  // ODP, dst.) dihitung otomatis dari JUMLAH trafik semua pelanggan yang
+  // tersambung di bawahnya (langsung maupun lewat estafet beberapa level) —
+  // BUKAN dari interface router, karena perangkat pasif seperti itu memang
+  // tidak punya interface sendiri untuk dibaca. Trafik per-pelanggan sendiri
+  // (customers.traffic_down_mbps/up_mbps) disinkron live oleh mikrotik-agent.mjs
+  // dari interface PPPoE masing-masing pelanggan di router (mis. <pppoe-budi>).
+  function collectDescendantCustomers(nodeId, siteNodes){
+    const direct = customers.filter(c => c.node_id === nodeId);
+    const childNodes = siteNodes.filter(ch => ch.parent_id === nodeId);
+    return childNodes.reduce((acc, ch) => acc.concat(collectDescendantCustomers(ch.id, siteNodes)), direct.slice());
+  }
+
+  function getNodeTrafficRollup(node, siteNodes){
+    // Node dengan "Interface MikroTik" terisi = router sungguhan, trafiknya
+    // dibaca langsung oleh agent dari interface itu — pakai apa adanya.
+    if(node.mikrotik_interface){
+      return (node.traffic_down_mbps!=null || node.traffic_up_mbps!=null)
+        ? { down: node.traffic_down_mbps, up: node.traffic_up_mbps } : null;
+    }
+    // Selain itu (HTB/splitter/hub/ODP dll.) — jumlahkan trafik pelanggan di bawahnya.
+    const custs = collectDescendantCustomers(node.id, siteNodes);
+    if(custs.length){
+      const down = custs.reduce((s,c) => s + (c.traffic_down_mbps || 0), 0);
+      const up = custs.reduce((s,c) => s + (c.traffic_up_mbps || 0), 0);
+      return { down, up };
+    }
+    // Belum ada pelanggan yang di-link ke node ini/turunannya (customers.node_id
+    // kosong) — fallback ke input manual lama di node ini sendiri, kalau ada,
+    // supaya data yang sudah pernah diisi manual tidak hilang begitu saja.
+    return (node.traffic_down_mbps!=null || node.traffic_up_mbps!=null)
+      ? { down: node.traffic_down_mbps, up: node.traffic_up_mbps } : null;
+  }
+
   function renderDevicesTopology(){
     const el = document.getElementById('devices-topology'); if(!el) return;
     const scoped = networkNodes.filter(inSite);
@@ -3269,6 +3342,23 @@
         path.setAttribute('class', 'topo-link');
         path.setAttribute('d', `M${x1},${y1} C${x1},${midY} ${x2},${midY} ${x2},${y2}`);
         svg.appendChild(path);
+
+        // Trafik di garis jalur — otomatis: node router (Interface MikroTik terisi)
+        // dibaca langsung dari agent, node pasif (HTB/splitter/hub/ODP) dihitung
+        // dari jumlah trafik semua pelanggan di bawahnya. Label hanya muncul
+        // kalau memang ada datanya (bukan dipenuhi "—" untuk jalur tanpa data).
+        const traf = getNodeTrafficRollup(n, siteNodes);
+        if(traf){
+          const down = traf.down!=null ? traf.down.toFixed(1) : '—';
+          const up = traf.up!=null ? traf.up.toFixed(1) : '—';
+          const label = document.createElementNS(NS, 'text');
+          label.setAttribute('class', 'topo-traffic-label');
+          label.setAttribute('x', (x1+x2)/2);
+          label.setAttribute('y', midY - 4);
+          label.setAttribute('text-anchor', 'middle');
+          label.textContent = `↓${down} / ↑${up} Mbps`;
+          svg.appendChild(label);
+        }
       });
 
       siteNodes.forEach(n=>{
@@ -3728,6 +3818,17 @@
   function onDeviceTypeChange(){
     const type = document.getElementById('dm-type').value;
     document.getElementById('dm-ports-field').style.display = PORTED_TYPES.includes(type) ? 'flex' : 'none';
+    const htbHint = document.getElementById('dm-htb-hint');
+    if(htbHint) htbHint.style.display = type==='htb' ? 'block' : 'none';
+  }
+
+  // Kalau "Interface MikroTik" diisi, 2 field trafik manual dikunci (bukan
+  // dihapus) — sekadar menegaskan ke admin bahwa nilainya sekarang otomatis
+  // dari agent, supaya tidak bingung kenapa angkanya "tidak nurut" saat diketik.
+  function onDeviceMikrotikInterfaceChange(){
+    const filled = document.getElementById('dm-mikrotik-interface').value.trim() !== '';
+    document.getElementById('dm-traffic-down').disabled = filled;
+    document.getElementById('dm-traffic-up').disabled = filled;
   }
 
   function populateParentPortSelect(){
@@ -3825,6 +3926,45 @@
       candidates.map(n=>`<option value="${n.id}">${deviceLabel(n)} (${deviceTypeLabel(n.type)})</option>`).join('');
   }
 
+  // Solusi kasus "HTB berdiri sendiri jadi ditelan hitungan perangkat": daripada
+  // memaksa membuat perangkat tambahan hanya untuk "mewakili" satu pelanggan,
+  // pelanggan bisa dihubungkan LANGSUNG ke perangkat endpoint (HTB/router) yang
+  // sudah ada lewat kolom ini. Menulis balik ke customers.node_id — satu-satunya
+  // jalur UI untuk kolom itu saat ini (sebelumnya cuma bisa lewat SQL manual).
+  function populateDeviceCustomerSelect(siteId, currentNodeId){
+    const sel = document.getElementById('dm-customer'); if(!sel) return;
+    const scoped = customers.filter(c => c.site_id===siteId);
+    sel.innerHTML = '<option value="">— Tidak ada / bukan titik pelanggan —</option>' +
+      scoped.map(c=>{
+        const takenElsewhere = c.node_id && c.node_id !== currentNodeId;
+        const label = takenElsewhere ? `${c.name} (sudah terhubung ke perangkat lain)` : c.name;
+        return `<option value="${c.id}">${label}</option>`;
+      }).join('');
+    const linked = currentNodeId ? scoped.find(c=>c.node_id===currentNodeId) : null;
+    sel.value = linked ? linked.id : '';
+  }
+
+  // Kasus "harus pilih di map, susah": lat/lng sekarang bisa diisi manual atau
+  // ditempel langsung dari Google Maps ("-6.914, 107.609"), tidak wajib geser
+  // pin di peta lagi. Tetap sinkron dua arah dengan drag-marker yang sudah ada.
+  function onDeviceLatLngTyped(){
+    const lat = document.getElementById('dm-lat').value;
+    const lng = document.getElementById('dm-lng').value;
+    const hint = document.getElementById('dm-position-hint');
+    hint.textContent = (lat!=='' && lng!=='')
+      ? `📍 ${Number(lat).toFixed(5)}, ${Number(lng).toFixed(5)}`
+      : '📍 Belum ada posisi';
+  }
+  function onDeviceLatLngPaste(){
+    const raw = document.getElementById('dm-latlng-paste').value.trim();
+    const m = raw.match(/(-?\d+(?:\.\d+)?)\s*[,\s]\s*(-?\d+(?:\.\d+)?)/);
+    if(!m) return;
+    document.getElementById('dm-lat').value = m[1];
+    document.getElementById('dm-lng').value = m[2];
+    document.getElementById('dm-latlng-paste').value = '';
+    onDeviceLatLngTyped();
+  }
+
   function openDeviceModal(mode, refId, presetLatLng){
     editingDeviceId = mode==='edit' ? refId : null;
     const presetParentId = mode==='create' ? (refId || '') : null;
@@ -3838,6 +3978,11 @@
     document.getElementById('dm-ports-a').value = node ? (node.ports_a||0) : 0;
     document.getElementById('dm-ports-b').value = node ? (node.ports_b||0) : 0;
     document.getElementById('dm-parent-port').value = node ? (node.parent_port||'') : '';
+    document.getElementById('dm-traffic-down').value = node && node.traffic_down_mbps!=null ? node.traffic_down_mbps : '';
+    document.getElementById('dm-traffic-up').value = node && node.traffic_up_mbps!=null ? node.traffic_up_mbps : '';
+    document.getElementById('dm-mikrotik-interface').value = node && node.mikrotik_interface ? node.mikrotik_interface : '';
+    onDeviceMikrotikInterfaceChange();
+    document.getElementById('dm-latlng-paste').value = '';
     onDeviceTypeChange();
 
     const lat = node ? node.lat : (presetLatLng ? presetLatLng.lat : null);
@@ -3851,12 +3996,15 @@
     const siteId = node ? node.site_id : (currentSite!=='all' ? currentSite : (sites[0] && sites[0].id));
     populateDeviceSiteSelect(siteId);
     populateDeviceParentSelect(siteId, node ? node.id : null);
+    populateDeviceCustomerSelect(siteId, node ? node.id : null);
     if(node && node.parent_id) document.getElementById('dm-parent').value = node.parent_id;
     if(!node && presetParentId) document.getElementById('dm-parent').value = presetParentId;
     populateParentPortSelect();
 
     document.getElementById('dm-site').onchange = ()=>{
-      populateDeviceParentSelect(document.getElementById('dm-site').value, node ? node.id : null);
+      const newSiteId = document.getElementById('dm-site').value;
+      populateDeviceParentSelect(newSiteId, node ? node.id : null);
+      populateDeviceCustomerSelect(newSiteId, node ? node.id : null);
       populateParentPortSelect();
     };
 
@@ -3877,11 +4025,30 @@
     const portsA = parseInt(document.getElementById('dm-ports-a').value, 10) || 0;
     const portsB = parseInt(document.getElementById('dm-ports-b').value, 10) || 0;
     const parentPort = document.getElementById('dm-parent-port').value.trim();
+    const trafficDownRaw = document.getElementById('dm-traffic-down').value;
+    const trafficUpRaw = document.getElementById('dm-traffic-up').value;
+    const mikrotikInterface = document.getElementById('dm-mikrotik-interface').value.trim();
+    const customerId = document.getElementById('dm-customer').value || null;
     const latRaw = document.getElementById('dm-lat').value;
     const lngRaw = document.getElementById('dm-lng').value;
 
     if(!name){ showToast('Nama perangkat wajib diisi'); return; }
     if(!siteId){ showToast('Pilih server terlebih dahulu'); return; }
+
+    // Kasus "belum ada validasi port": satu port di induk yang sama tidak
+    // boleh dipakai dua perangkat anak sekaligus — dicek terhadap SEMUA
+    // saudara kandung (parent_id sama), bukan hanya yang terlihat di layar.
+    if(parentId && parentPort){
+      const conflict = networkNodes.find(n =>
+        n.parent_id === parentId &&
+        n.id !== editingDeviceId &&
+        (n.parent_port||'').trim().toLowerCase() === parentPort.toLowerCase()
+      );
+      if(conflict){
+        showToast(`Port "${parentPort}" di perangkat induk ini sudah dipakai oleh "${deviceLabel(conflict)}" — pilih port lain.`);
+        return;
+      }
+    }
 
     const btn = document.getElementById('dm-save-btn');
     btn.disabled = true; btn.textContent = 'Menyimpan…';
@@ -3890,24 +4057,53 @@
         site_id: siteId, node_type: type, parent_id: parentId, name,
         locked, ports_a: portsA, ports_b: portsB,
         parent_port: parentPort || null,
+        mikrotik_interface: mikrotikInterface || null,
       };
+      if(mikrotikInterface){
+        // Interface diisi -> trafik jadi urusan agent (siklus live). Sengaja TIDAK
+        // menyertakan traffic_down/up_mbps di payload supaya nilai yang sudah
+        // disinkron otomatis tidak tertimpa kosong hanya karena admin edit field lain.
+      } else {
+        payload.traffic_down_mbps = trafficDownRaw !== '' ? parseFloat(trafficDownRaw) : null;
+        payload.traffic_up_mbps = trafficUpRaw !== '' ? parseFloat(trafficUpRaw) : null;
+      }
       if(ip) payload.ip_address = ip;
       if(latRaw !== '') payload.lat = parseFloat(latRaw);
       if(lngRaw !== '') payload.lng = parseFloat(lngRaw);
 
-      let error;
+      let error, nodeId = editingDeviceId;
       if(editingDeviceId){
         ({ error } = await sb.from('network_nodes').update(payload).eq('id', editingDeviceId));
       } else {
-        ({ error } = await sb.from('network_nodes').insert(payload));
+        const { data: inserted, error: insErr } = await sb.from('network_nodes').insert(payload).select().single();
+        error = insErr;
+        if(inserted) nodeId = inserted.id;
       }
       if(error){
         showToast('Gagal menyimpan perangkat: ' + error.message);
         return;
       }
 
-      const { data, error: reErr } = await sb.from('network_nodes').select('*');
-      if(!reErr) networkNodes = (data||[]).map(normalizeNodeType).slice().sort((a,b)=> deviceLabel(a).localeCompare(deviceLabel(b)));
+      // Kasus "HTB berdiri sendiri jadi dihitung perangkat tambahan": hubungkan
+      // pelanggan LANGSUNG ke perangkat endpoint ini (customers.node_id), dan
+      // lepas dari perangkat lama kalau tautannya dipindah/dihapus di sini.
+      if(nodeId){
+        const previouslyLinked = customers.find(c => c.node_id === nodeId);
+        if(previouslyLinked && previouslyLinked.id !== customerId){
+          await sb.from('customers').update({ node_id: null }).eq('id', previouslyLinked.id);
+        }
+        if(customerId){
+          const { error: custErr } = await sb.from('customers').update({ node_id: nodeId }).eq('id', customerId);
+          if(custErr) showToast('Perangkat tersimpan, tapi gagal menghubungkan pelanggan: ' + custErr.message);
+        }
+      }
+
+      const [{ data: nodeData, error: reErr }, { data: custData, error: custReErr }] = await Promise.all([
+        sb.from('network_nodes').select('*'),
+        sb.from('customers').select('*').order('name'),
+      ]);
+      if(!reErr) networkNodes = (nodeData||[]).map(normalizeNodeType).slice().sort((a,b)=> deviceLabel(a).localeCompare(deviceLabel(b)));
+      if(!custReErr) customers = custData || [];
       renderDevicesTree();
       renderTopologyMapIfActive();
       closeDeviceModal();
