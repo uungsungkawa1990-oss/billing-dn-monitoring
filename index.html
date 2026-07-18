@@ -888,6 +888,9 @@
           </div>
         </div>
 
+        <div class="card-head" style="margin-bottom:10px;"><h3>Dashboard Monitoring</h3><span class="muted">ringkasan seluruh server, sekali lihat</span></div>
+        <div id="mikrotik-dashboard-container" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(240px,1fr)); gap:14px; margin-bottom:22px;"></div>
+
         <div class="card-head" style="margin-bottom:10px;"><h3>Status Agent per Server</h3><span class="muted">heartbeat</span></div>
         <div id="mikrotik-agents-container" style="display:flex; flex-direction:column; gap:14px; margin-bottom:22px;"></div>
 
@@ -904,7 +907,47 @@
           </table>
         </div>
 
-        <div class="card-head" style="margin-bottom:10px;"><h3>Antrean Perintah</h3><span class="muted">mikrotik_commands</span></div>
+        <div class="card-head" style="margin-bottom:10px;"><h3>Live Interface</h3><span class="muted">mikrotik_interfaces · disinkron ±30 detik</span></div>
+        <div class="table-wrap" style="margin-bottom:22px;">
+          <table>
+            <thead>
+              <tr><th>Server</th><th>Interface</th><th>Tipe</th><th>Status</th><th>RX</th><th>TX</th></tr>
+            </thead>
+            <tbody id="mikrotik-interfaces-tbody"></tbody>
+          </table>
+        </div>
+
+        <div class="card-head" style="margin-bottom:10px;"><h3>Sesi Hotspot Aktif</h3><span class="muted">mikrotik_hotspot_active</span></div>
+        <div class="table-wrap" style="margin-bottom:22px;">
+          <table>
+            <thead>
+              <tr><th>Server</th><th>User</th><th>IP Address</th><th>MAC</th><th>Uptime</th><th>Data (In/Out)</th></tr>
+            </thead>
+            <tbody id="mikrotik-hotspot-active-tbody"></tbody>
+          </table>
+        </div>
+
+        <div class="card-head" style="margin-bottom:10px;"><h3>Queue Monitor</h3><span class="muted">mikrotik_queues · /queue/simple</span></div>
+        <div class="table-wrap" style="margin-bottom:22px;">
+          <table>
+            <thead>
+              <tr><th>Server</th><th>Nama Queue</th><th>Target</th><th>Max Limit</th><th>Rate Saat Ini</th></tr>
+            </thead>
+            <tbody id="mikrotik-queues-tbody"></tbody>
+          </table>
+        </div>
+
+        <div class="card-head" style="margin-bottom:10px;"><h3>Event Log</h3><span class="muted">mikrotik_events · interface naik/turun, agent putus/pulih</span></div>
+        <div class="table-wrap" style="margin-bottom:22px;">
+          <table>
+            <thead>
+              <tr><th>Server</th><th>Level</th><th>Pesan</th><th>Waktu</th></tr>
+            </thead>
+            <tbody id="mikrotik-events-tbody"></tbody>
+          </table>
+        </div>
+
+        <div class="card-head" style="margin-bottom:10px;"><h3>Command History</h3><span class="muted">mikrotik_commands</span></div>
         <div class="table-wrap">
           <table>
             <thead>
@@ -2149,6 +2192,10 @@
   let mikrotikCommands = [];
   let siteLiveStats = [];       // site_live_stats: CPU/RAM/disk/uptime per server (Monitoring MikroTik)
   let pppActiveSessions = [];   // mikrotik_ppp_active: sesi PPPoE yang sedang connect
+  let mikrotikInterfaces = [];  // mikrotik_interfaces: snapshot semua interface per server
+  let hotspotActiveSessions = []; // mikrotik_hotspot_active: sesi hotspot yang sedang connect
+  let mikrotikQueues = [];      // mikrotik_queues: snapshot /queue/simple
+  let mikrotikEvents = [];      // mikrotik_events: riwayat interface naik/turun, agent putus/pulih
   let pppSecrets = [];          // mikrotik_ppp_secrets: akun PPPoE apa adanya di router (termasuk yang belum jadi Customer)
   let notifications = [];
   let notificationReads = [];
@@ -2267,7 +2314,7 @@
   // ---------- FETCH ----------
   async function fetchAll(){
     const since24h = new Date(Date.now() - 24*3600*1000).toISOString();
-    const [sRes, cRes, tRes, vRes, invRes, logRes, tkRes, ndRes, mkRes, ivRes, woRes, exRes, prRes, ntRes, nrRes, itgRes, itgLogRes, aiRes, gaRes, gaCfgRes, slsRes, ppaRes, ppsRes] = await Promise.all([
+    const [sRes, cRes, tRes, vRes, invRes, logRes, tkRes, ndRes, mkRes, ivRes, woRes, exRes, prRes, ntRes, nrRes, itgRes, itgLogRes, aiRes, gaRes, gaCfgRes, slsRes, ppaRes, ppsRes, mifRes, mhaRes, mqRes, mevRes] = await Promise.all([
       sb.from('sites').select('*').order('name'),
       sb.from('customers').select('*').order('name'),
       sb.from('technicians').select('*').order('name'),
@@ -2290,7 +2337,11 @@
       sb.from('genieacs_config').select('*').limit(1),
       sb.from('site_live_stats').select('*'),
       sb.from('mikrotik_ppp_active').select('*'),
-      sb.from('mikrotik_ppp_secrets').select('*').order('username')
+      sb.from('mikrotik_ppp_secrets').select('*').order('username'),
+      sb.from('mikrotik_interfaces').select('*'),
+      sb.from('mikrotik_hotspot_active').select('*'),
+      sb.from('mikrotik_queues').select('*'),
+      sb.from('mikrotik_events').select('*').order('created_at', {ascending:false}).limit(200)
     ]);
     sites = sRes.data || [];
     customers = cRes.data || [];
@@ -2322,6 +2373,10 @@
     siteLiveStats = slsRes.data || [];
     pppActiveSessions = ppaRes.data || [];
     pppSecrets = ppsRes.data || [];
+    mikrotikInterfaces = mifRes.data || [];
+    hotspotActiveSessions = mhaRes.data || [];
+    mikrotikQueues = mqRes.data || [];
+    mikrotikEvents = mevRes.data || [];
     if(slsRes.error) console.error('site_live_stats:', slsRes.error);
     if(ppaRes.error) console.error('mikrotik_ppp_active:', ppaRes.error);
     if(ppsRes.error) console.error('mikrotik_ppp_secrets:', ppsRes.error);
@@ -2419,6 +2474,30 @@
         pppSecrets = data || [];
         renderMikrotikPage();
         renderCustomerTable(document.getElementById('global-search').value);
+      })
+      .on('postgres_changes', {event:'*', schema:'public', table:'mikrotik_interfaces'}, async ()=>{
+        const { data, error } = await sb.from('mikrotik_interfaces').select('*');
+        if(error){ console.error('mikrotik_interfaces:', error); return; }
+        mikrotikInterfaces = data || [];
+        renderMikrotikPage();
+      })
+      .on('postgres_changes', {event:'*', schema:'public', table:'mikrotik_hotspot_active'}, async ()=>{
+        const { data, error } = await sb.from('mikrotik_hotspot_active').select('*');
+        if(error){ console.error('mikrotik_hotspot_active:', error); return; }
+        hotspotActiveSessions = data || [];
+        renderMikrotikPage();
+      })
+      .on('postgres_changes', {event:'*', schema:'public', table:'mikrotik_queues'}, async ()=>{
+        const { data, error } = await sb.from('mikrotik_queues').select('*');
+        if(error){ console.error('mikrotik_queues:', error); return; }
+        mikrotikQueues = data || [];
+        renderMikrotikPage();
+      })
+      .on('postgres_changes', {event:'*', schema:'public', table:'mikrotik_events'}, async ()=>{
+        const { data, error } = await sb.from('mikrotik_events').select('*').order('created_at', {ascending:false}).limit(200);
+        if(error){ console.error('mikrotik_events:', error); return; }
+        mikrotikEvents = data || [];
+        renderMikrotikPage();
       })
       .on('postgres_changes', {event:'*', schema:'public', table:'inventory_items'}, async ()=>{
         const { data, error } = await sb.from('inventory_items').select('*').order('name');
@@ -3116,11 +3195,55 @@
   function escapeHtml(s){ return s.replace(/[&<>]/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[m])); }
 
   function renderMikrotikPage(){
+    renderMikrotikDashboard();
     renderMikrotikKpis();
     renderMikrotikQueue();
     renderAgents('mikrotik-agents-container');
     renderMikrotikLiveStats();
     renderPppActiveTable();
+    renderInterfacesTable();
+    renderHotspotActiveTable();
+    renderQueuesTable();
+    renderEventsTable();
+  }
+
+  // Dashboard Monitoring (scope #1) — murni agregasi dari data yang sudah
+  // di-fetch (site_live_stats, mikrotik_interfaces, mikrotik_events, dst),
+  // TIDAK ada query/tabel baru — cukup ringkasan per server dalam satu layar.
+  function renderMikrotikDashboard(){
+    const el = document.getElementById('mikrotik-dashboard-container'); if(!el) return;
+    el.innerHTML = '';
+    const relevantSites = currentSite==='all' ? sites : sites.filter(s=>s.id===currentSite);
+
+    relevantSites.forEach(s=>{
+      const stat = siteLiveStats.find(x=>x.site_id===s.id);
+      const ifaces = mikrotikInterfaces.filter(i=>i.site_id===s.id);
+      const ifacesUp = ifaces.filter(i=>i.running && !i.disabled).length;
+      const ifacesDown = ifaces.filter(i=>!i.running && !i.disabled).length;
+      const lastEvent = mikrotikEvents.find(e=>e.site_id===s.id);
+      const connected = s.agent_status === 'terhubung';
+
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.style.cssText = 'padding:14px 16px;';
+      card.innerHTML = `
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+          <strong style="font-size:13.5px;">${s.name}</strong>
+          <span class="badge ${connected?'on':'off'}"><span class="sw" style="background:${connected?'var(--on)':'var(--off)'}"></span>${connected?'Terhubung':'Terputus'}</span>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:4px; font-size:12.5px; color:var(--ink-2);">
+          <div>CPU: <strong style="color:var(--ink-1);">${stat && stat.cpu_load!=null ? stat.cpu_load+'%' : '—'}</strong> · Mem: <strong style="color:var(--ink-1);">${stat && stat.memory_used_percent!=null ? stat.memory_used_percent+'%' : '—'}</strong></div>
+          <div>PPPoE aktif: <strong style="color:var(--ink-1);">${stat ? stat.ppp_active_count : 0}</strong> · Hotspot aktif: <strong style="color:var(--ink-1);">${stat ? stat.hotspot_active_count : 0}</strong></div>
+          <div>Interface: <strong style="color:var(--on);">${ifacesUp} up</strong>${ifacesDown ? ` · <strong style="color:var(--off);">${ifacesDown} down</strong>` : ''}</div>
+          <div style="margin-top:2px; padding-top:6px; border-top:1px solid var(--line);">${lastEvent ? escapeHtml(lastEvent.message) + ' · ' + timeAgo(lastEvent.created_at) : 'Belum ada event'}</div>
+        </div>
+      `;
+      el.appendChild(card);
+    });
+
+    if(!relevantSites.length){
+      el.innerHTML = '<div class="empty-note">Belum ada server terdaftar</div>';
+    }
   }
 
   function renderMikrotikLiveStats(){
@@ -3175,6 +3298,99 @@
     });
     if(!scoped.length){
       tb.innerHTML = '<tr><td colspan="5" class="empty-note">Tidak ada sesi PPPoE aktif di server ini</td></tr>';
+    }
+  }
+
+  function renderInterfacesTable(){
+    const tb = document.getElementById('mikrotik-interfaces-tbody'); if(!tb) return;
+    tb.innerHTML = '';
+    const scoped = mikrotikInterfaces.filter(i => currentSite==='all' || i.site_id===currentSite);
+    scoped.forEach(i=>{
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td class="mono-cell" data-label="Server">${siteName(i.site_id).split(' — ')[0]}</td>
+        <td data-label="Interface"><strong>${i.name}</strong></td>
+        <td data-label="Tipe">${i.type || '—'}</td>
+        <td data-label="Status">${i.disabled
+          ? '<span class="badge iso"><span class="sw" style="background:var(--iso)"></span>Disabled</span>'
+          : i.running
+            ? '<span class="badge on"><span class="sw" style="background:var(--on)"></span>Running</span>'
+            : '<span class="badge off"><span class="sw" style="background:var(--off)"></span>Down</span>'}</td>
+        <td class="mono-cell" data-label="RX">${i.rx_bytes!=null ? formatBytes(i.rx_bytes) : '—'}</td>
+        <td class="mono-cell" data-label="TX">${i.tx_bytes!=null ? formatBytes(i.tx_bytes) : '—'}</td>
+      `;
+      tb.appendChild(tr);
+    });
+    if(!scoped.length){
+      tb.innerHTML = '<tr><td colspan="6" class="empty-note">Belum ada data interface — menunggu siklus sync agent</td></tr>';
+    }
+  }
+  function formatBytes(n){
+    if(n < 1024) return n + ' B';
+    if(n < 1024*1024) return (n/1024).toFixed(1) + ' KB';
+    if(n < 1024*1024*1024) return (n/1024/1024).toFixed(1) + ' MB';
+    return (n/1024/1024/1024).toFixed(2) + ' GB';
+  }
+
+  function renderHotspotActiveTable(){
+    const tb = document.getElementById('mikrotik-hotspot-active-tbody'); if(!tb) return;
+    tb.innerHTML = '';
+    const scoped = hotspotActiveSessions.filter(a => currentSite==='all' || a.site_id===currentSite);
+    scoped.forEach(a=>{
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td class="mono-cell" data-label="Server">${siteName(a.site_id).split(' — ')[0]}</td>
+        <td data-label="User"><strong>${a.user_name || '—'}</strong></td>
+        <td class="mono-cell" data-label="IP Address">${a.address || '—'}</td>
+        <td class="mono-cell" data-label="MAC">${a.mac_address || '—'}</td>
+        <td data-label="Uptime">${a.uptime || '—'}</td>
+        <td data-label="Data (In/Out)">${a.bytes_in!=null ? formatBytes(a.bytes_in) : '—'} / ${a.bytes_out!=null ? formatBytes(a.bytes_out) : '—'}</td>
+      `;
+      tb.appendChild(tr);
+    });
+    if(!scoped.length){
+      tb.innerHTML = '<tr><td colspan="6" class="empty-note">Tidak ada sesi hotspot aktif di server ini</td></tr>';
+    }
+  }
+
+  function renderQueuesTable(){
+    const tb = document.getElementById('mikrotik-queues-tbody'); if(!tb) return;
+    tb.innerHTML = '';
+    const scoped = mikrotikQueues.filter(q => currentSite==='all' || q.site_id===currentSite);
+    scoped.forEach(q=>{
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td class="mono-cell" data-label="Server">${siteName(q.site_id).split(' — ')[0]}</td>
+        <td data-label="Nama Queue"><strong>${q.name}</strong></td>
+        <td class="mono-cell" data-label="Target">${q.target || '—'}</td>
+        <td class="mono-cell" data-label="Max Limit">${q.max_limit || '—'}</td>
+        <td class="mono-cell" data-label="Rate Saat Ini">${q.rate || '—'}</td>
+      `;
+      tb.appendChild(tr);
+    });
+    if(!scoped.length){
+      tb.innerHTML = '<tr><td colspan="5" class="empty-note">Belum ada queue terpantau di server ini</td></tr>';
+    }
+  }
+
+  function renderEventsTable(){
+    const tb = document.getElementById('mikrotik-events-tbody'); if(!tb) return;
+    tb.innerHTML = '';
+    const scoped = mikrotikEvents.filter(e => currentSite==='all' || e.site_id===currentSite);
+    const levelMeta = { info:{cls:'on', label:'Info'}, warning:{cls:'iso', label:'Warning'}, critical:{cls:'off', label:'Critical'} };
+    scoped.slice(0, 100).forEach(e=>{
+      const m = levelMeta[e.level] || levelMeta.info;
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td class="mono-cell" data-label="Server">${siteName(e.site_id).split(' — ')[0]}</td>
+        <td data-label="Level"><span class="badge ${m.cls}"><span class="sw" style="background:${m.cls==='on'?'var(--on)':m.cls==='off'?'var(--off)':'var(--iso)'}"></span>${m.label}</span></td>
+        <td data-label="Pesan">${e.message}</td>
+        <td class="mono-cell" data-label="Waktu">${e.created_at ? timeAgo(e.created_at) : '—'}</td>
+      `;
+      tb.appendChild(tr);
+    });
+    if(!scoped.length){
+      tb.innerHTML = '<tr><td colspan="4" class="empty-note">Belum ada event tercatat</td></tr>';
     }
   }
 
