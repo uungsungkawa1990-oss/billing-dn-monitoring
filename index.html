@@ -2732,6 +2732,8 @@
     customers.filter(inSite).filter(c=> !q || c.name.toLowerCase().includes(q) || c.customer_code.toLowerCase().includes(q))
     .forEach((c)=>{
       const tr = document.createElement('tr');
+      tr.style.cursor = 'pointer';
+      tr.onclick = ()=>openDrawer(c.id);
       tr.innerHTML = `
         <td data-label="Nama"><strong>${c.name}</strong></td>
         <td class="mono-cell" data-label="ID">${c.customer_code}</td>
@@ -2740,7 +2742,10 @@
         <td data-label="Paket">${c.package||'—'}</td>
         <td data-label="Status"><span class="badge ${statusClass(c.status)}"><span class="sw" style="background:${statusColor(c.status)}"></span>${c.status}</span></td>
         <td class="mono-cell" data-label="Username">${c.pppoe_username||'—'}</td>
-        <td><button class="row-link" onclick="openDrawer('${c.id}')">Lihat →</button></td>
+        <td style="white-space:nowrap;">
+          <button class="row-link" onclick="event.stopPropagation(); openCustomerModal('edit','${c.id}')">Edit</button>
+          <button class="row-link" onclick="event.stopPropagation(); openDrawer('${c.id}')">Lihat →</button>
+        </td>
       `;
       tb.appendChild(tr);
     });
