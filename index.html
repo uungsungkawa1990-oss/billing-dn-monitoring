@@ -268,6 +268,11 @@
   }
   .map-legend .row{ display:flex; align-items:center; gap:7px; color:var(--ink-2); }
   .map-legend .sw{ width:9px; height:9px; border-radius:50%; }
+  .topology-search-box input{
+    width:220px; padding:8px 12px; border:1px solid var(--line-2); border-radius:8px;
+    font-size:13px; background:var(--surface); color:var(--ink); box-shadow:var(--shadow-1);
+  }
+  .topology-marker{ background:transparent; border:none; }
 
   /* ============ TABLE ============ */
   .table-wrap{ background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-m); overflow:hidden; box-shadow:var(--shadow-1); }
@@ -403,7 +408,7 @@
 
   .modal-overlay{
     position:fixed; inset:0; background:rgba(20,23,28,0.35); opacity:0; pointer-events:none;
-    display:flex; align-items:center; justify-content:center; transition:opacity .18s ease; z-index:50; padding:16px;
+    display:flex; align-items:center; justify-content:center; transition:opacity .18s ease; z-index:2000; padding:16px;
   }
   .modal-overlay.open{ opacity:1; pointer-events:auto; }
   .modal-box{
@@ -863,7 +868,7 @@
               <span class="hint" id="map-mode-hint"></span>
             </div>
           </div>
-          <div class="audit-mini" style="margin-bottom:8px;">Hybrid: sebagian jalur boleh lewat OLT (fiber/PON), sebagian lewat HTB/Switch (tembaga) — tipe perangkat bebas dicampur dalam satu server, tidak wajib semua ke OLT.</div>
+          
           <div id="topology-map" style="height:560px; border-radius:12px; overflow:hidden; border:1px solid var(--line-2);"></div>
           <div class="map-legend" style="position:static; margin-top:8px; display:flex; flex-wrap:wrap; gap:12px; background:none; box-shadow:none; padding:0;">
             <div class="row"><span class="sw" style="background:#2563eb"></span>Router/MikroTik</div>
@@ -3507,10 +3512,35 @@
     if(!mapEl || topologyMapInstance) return;
     // Titik tengah default Indonesia — akan otomatis fit ke node begitu ada data.
     topologyMapInstance = L.map('topology-map').setView([-6.9, 107.6], 13);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 21,
-      attribution: '&copy; OpenStreetMap contributors'
-    }).addTo(topologyMapInstance);
+
+    const streets = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 21, attribution: '&copy; OpenStreetMap contributors'
+    });
+    // Esri World Imagery — citra satelit gratis tanpa API key. Cocok untuk
+    // pemakaian ringan-menengah; kalau volume sangat tinggi, Esri punya batas
+    // pemakaian gratisnya sendiri (di luar kendali kita, bukan bug app).
+    const satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+      maxZoom: 20, attribution: 'Tiles &copy; Esri'
+    });
+    satellite.addTo(topologyMapInstance); // default: citra satelit, sesuai referensi
+    L.control.layers({ 'Satelit': satellite, 'Peta Jalan': streets }, null, { position:'topright', collapsed:true }).addTo(topologyMapInstance);
+
+    // Kotak cari alamat (geocoding lewat Nominatim/OpenStreetMap, gratis tanpa API key)
+    const searchControl = L.control({ position:'topleft' });
+    searchControl.onAdd = function(){
+      const box = L.DomUtil.create('div', 'topology-search-box');
+      box.innerHTML = `<input type="text" id="topology-map-search" placeholder="Cari alamat…">`;
+      L.DomEvent.disableClickPropagation(box);
+      return box;
+    };
+    searchControl.addTo(topologyMapInstance);
+    let searchDebounce = null;
+    document.addEventListener('keydown', (e)=>{
+      if(e.target && e.target.id==='topology-map-search' && e.key==='Enter'){
+        clearTimeout(searchDebounce);
+        geocodeAndFly(e.target.value);
+      }
+    });
 
     topologyMapInstance.on('click', (e)=>{
       if(placingNewDevice){
@@ -3524,6 +3554,20 @@
         redrawEditingPath();
       }
     });
+  }
+
+  async function geocodeAndFly(query){
+    const q = (query||'').trim();
+    if(!q) return;
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(q)}`);
+      const results = await res.json();
+      if(!results || !results.length){ showToast('Alamat tidak ditemukan'); return; }
+      const { lat, lon } = results[0];
+      topologyMapInstance.setView([parseFloat(lat), parseFloat(lon)], 17);
+    } catch(e){
+      showToast('Gagal mencari alamat — coba lagi');
+    }
   }
 
   function nodeLatLng(n){
@@ -3595,7 +3639,7 @@
 
   function startPlaceNewDevice(){
     placingNewDevice = true;
-    document.getElementById('map-mode-hint').textContent = 'Klik lokasi di peta untuk menempatkan perangkat baru…';
+    document.getElementById('map-mode-hint').textContent = 'Klik lokasi di peta…';
   }
 
   function toggleEditPathMode(){
@@ -3604,7 +3648,7 @@
     const hint = document.getElementById('map-mode-hint');
     if(editPathMode){
       btn.classList.add('on');
-      hint.textContent = 'Mode Edit Jalur aktif — klik salah satu garis untuk mulai mengedit titiknya.';
+      hint.textContent = 'Klik jalur untuk edit';
     } else {
       btn.classList.remove('on');
       hint.textContent = '';
@@ -3616,7 +3660,7 @@
     editingLinkNodeId = nodeId;
     const link = networkLinks.find(l=>l.node_id===nodeId);
     editingWaypoints = (link && Array.isArray(link.waypoints)) ? link.waypoints.map(p=>[p[0],p[1]]) : [];
-    document.getElementById('map-mode-hint').innerHTML = 'Mengedit jalur — klik peta untuk tambah titik, geser titik untuk rapikan. <button class="btn btn-primary" style="width:auto; padding:4px 10px; font-size:11.5px; margin-left:6px;" onclick="saveEditingPath()">Simpan Jalur</button> <button class="btn btn-ghost" style="width:auto; padding:4px 10px; font-size:11.5px;" onclick="cancelEditPath()">Batal</button>';
+    document.getElementById('map-mode-hint').innerHTML = '<button class="btn btn-primary" style="width:auto; padding:4px 10px; font-size:11.5px;" onclick="saveEditingPath()">Simpan</button> <button class="btn btn-ghost" style="width:auto; padding:4px 10px; font-size:11.5px;" onclick="cancelEditPath()">Batal</button>';
     redrawEditingPath();
   }
 
@@ -3676,7 +3720,7 @@
     topologyWaypointHandles.forEach(h=>topologyMapInstance && topologyMapInstance.removeLayer(h));
     topologyWaypointHandles = [];
     const hint = document.getElementById('map-mode-hint');
-    if(hint) hint.textContent = editPathMode ? 'Mode Edit Jalur aktif — klik salah satu garis untuk mulai mengedit titiknya.' : '';
+    if(hint) hint.textContent = editPathMode ? 'Klik jalur untuk edit' : '';
     renderTopologyMap();
   }
 
@@ -3801,8 +3845,8 @@
     document.getElementById('dm-lat').value = lat!=null ? lat : '';
     document.getElementById('dm-lng').value = lng!=null ? lng : '';
     document.getElementById('dm-position-hint').textContent = lat!=null
-      ? `Posisi peta: ${Number(lat).toFixed(5)}, ${Number(lng).toFixed(5)} — geser marker di peta untuk mengubah.`
-      : 'Posisi di peta belum ditentukan — tambahkan lewat tab Peta Perangkat supaya lokasinya tepat, atau isi manual nanti dengan menggeser marker.';
+      ? `📍 ${Number(lat).toFixed(5)}, ${Number(lng).toFixed(5)}`
+      : '📍 Belum ada posisi';
 
     const siteId = node ? node.site_id : (currentSite!=='all' ? currentSite : (sites[0] && sites[0].id));
     populateDeviceSiteSelect(siteId);
