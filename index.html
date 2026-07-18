@@ -200,6 +200,19 @@
   @keyframes fadein{ from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:none;} }
 
   .page-head{ margin-bottom: 20px; }
+  /* 🐛 FIX (dilaporkan pengguna 19 Jul 2026): sebelumnya tidak ada indikasi
+     apa pun kalau status Online/Offline pelanggan yang ditampilkan bisa jadi
+     BASI — customers.status hanya berubah lewat aksi manual (isolir/buat
+     akun), TIDAK ada sinkronisasi otomatis dari sesi PPPoE aktif di router.
+     Kalau agent bahkan tidak berhasil terhubung ke server sama sekali,
+     dashboard tetap menampilkan angka lama seolah-olah real-time — banner
+     ini membuat keterbatasan itu terlihat jelas, bukan diam-diam menyesatkan. */
+  .stale-banner{
+    display:flex; align-items:flex-start; gap:10px; background:#fff7e6; border:1px solid #f0c869;
+    color:#7a5a00; border-radius:var(--radius-s); padding:11px 14px; margin-bottom:16px; font-size:12.5px; line-height:1.5;
+  }
+  .stale-banner svg{ width:17px; height:17px; flex-shrink:0; margin-top:1px; }
+  .stale-banner strong{ font-weight:700; }
   .page-head h2{ font-family:var(--display); font-size:20px; font-weight:600; margin:0 0 4px; }
   .page-head p{ color:var(--ink-2); font-size:13px; margin:0; max-width:560px; }
 
@@ -275,7 +288,20 @@
   .topology-marker{ background:transparent; border:none; }
 
   /* ============ TABLE ============ */
-  .table-wrap{ background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-m); overflow:hidden; box-shadow:var(--shadow-1); }
+  .table-wrap{
+    background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-m);
+    box-shadow:var(--shadow-1);
+    /* 🐛 FIX (dilaporkan pengguna 19 Jul 2026): sebelumnya overflow:hidden —
+       kalau isi tabel (nama pelanggan panjang dkk) lebih lebar dari
+       container, kolom PALING KANAN (aksi "Edit"/"Lihat") ikut TERPOTONG
+       HABIS dan hilang dari tampilan, bukan sekadar butuh di-scroll. Contoh
+       nyata: server dengan nama pelanggan panjang (mis. "ADISIRNABAKTI")
+       kehilangan kolom aksi sama sekali, sementara server dengan nama
+       pendek (mis. "B4","B7") masih menampilkannya normal karena
+       tabelnya kebetulan cukup sempit. overflow-x:auto membuatnya bisa
+       digeser ke kanan alih-alih hilang. */
+    overflow-x:auto; overflow-y:hidden;
+  }
   table{ width:100%; border-collapse:collapse; font-size:12.8px; }
   thead th{
     text-align:left; padding:11px 16px; font-size:11px; text-transform:uppercase; letter-spacing:.4px;
@@ -297,6 +323,13 @@
   .mono-cell{ font-family:var(--mono); font-size:12px; }
   .row-link{ background:none; border:none; color:var(--wire-blue); font-weight:600; font-size:12.5px; padding:0; }
   .row-link:hover{ text-decoration:underline; }
+  /* 🐛 FIX (dilaporkan pengguna 19 Jul 2026): tombol "Edit" & "Lihat →" di
+     kolom aksi tabel pelanggan sebelumnya cuma dipisah 1 spasi HTML biasa,
+     jadi terbaca seperti satu frasa menyatu ("EditLihat →"). Wrapper +
+     garis pemisah eksplisit di bawah membuat keduanya jelas 2 aksi
+     terpisah. */
+  .row-actions{ display:inline-flex; align-items:center; gap:9px; }
+  .row-actions > .sep{ width:1px; height:11px; background:var(--line-2); display:inline-block; }
 
   /* ============ CREDENTIAL REVEAL ============ */
   .cred-box{
@@ -669,8 +702,9 @@
       <div class="page active" id="page-dashboard">
         <div class="page-head">
           <h2>Ringkasan Jaringan</h2>
-          <p>Kondisi jaringan &amp; billing hari ini, diperbarui otomatis dari MikroTik &amp; OLT.</p>
+          <p>Kondisi jaringan &amp; billing hari ini.</p>
         </div>
+        <div id="dashboard-stale-banner"></div>
 
         <div class="kpi-row">
           <div class="kpi">
@@ -748,6 +782,7 @@
           <h2>Pelanggan</h2>
           <p>Data pelanggan, akses jaringan, dan kredensial PPPoE.</p>
         </div>
+        <div id="customers-stale-banner"></div>
         <div class="device-toolbar">
           <button class="btn btn-primary" style="width:auto; padding:9px 16px;" onclick="openCustomerModal('create')">+ Tambah Pelanggan</button>
         </div>
@@ -1395,10 +1430,8 @@
           <div id="agents-container" style="display:flex; flex-direction:column; gap:14px;"></div>
           <div class="card">
             <div class="card-head"><h3>Audit Log Terbaru</h3><span class="muted">akses kredensial</span></div>
-            <div class="feed">
-              <div class="feed-row"><span class="dot" style="background:var(--wire-blue)"></span><span class="who">admin melihat sandi PPPoE — Budi Santoso</span><span class="when">10:42</span></div>
-              <div class="feed-row"><span class="dot" style="background:var(--wire-blue)"></span><span class="who">admin mengganti sandi — Rina Wulandari</span><span class="when">09:15</span></div>
-              <div class="feed-row"><span class="dot" style="background:var(--wire-orange)"></span><span class="who">sistem membuat 50 voucher HOTSPOT-2H</span><span class="when">Kemarin</span></div>
+            <div class="feed" id="audit-log-feed">
+              <div class="empty-note">Memuat…</div>
             </div>
           </div>
         </div>
@@ -2251,6 +2284,7 @@
   let notificationFilter = 'all';
   let integrations = [];
   let integrationLogs = [];
+  let credentialAuditLog = [];
   let integrationFilter = 'all';
   let editingIntegrationId = null;
   let aiInsights = [];               // riwayat baris tabel ai_insights (diagnosis tiket + prediksi churn)
@@ -2363,7 +2397,7 @@
   // ---------- FETCH ----------
   async function fetchAll(){
     const since24h = new Date(Date.now() - 24*3600*1000).toISOString();
-    const [sRes, cRes, tRes, vRes, invRes, logRes, tkRes, ndRes, mkRes, ivRes, woRes, exRes, prRes, ntRes, nrRes, itgRes, itgLogRes, aiRes, gaRes, gaCfgRes, nlRes, seiRes] = await Promise.all([
+    const [sRes, cRes, tRes, vRes, invRes, logRes, tkRes, ndRes, mkRes, ivRes, woRes, exRes, prRes, ntRes, nrRes, itgRes, itgLogRes, aiRes, gaRes, gaCfgRes, nlRes, seiRes, calRes] = await Promise.all([
       sb.from('sites').select('*').order('name'),
       sb.from('customers').select('*').order('name'),
       sb.from('technicians').select('*').order('name'),
@@ -2385,7 +2419,16 @@
       sb.from('genieacs_devices').select('*').order('updated_at', {ascending:false}),
       sb.from('genieacs_config').select('*').limit(1),
       sb.from('network_links').select('*'),
-      sb.from('site_ether_interfaces').select('*')
+      sb.from('site_ether_interfaces').select('*'),
+      // 🐛 FIX (dilaporkan pengguna 19 Jul 2026): panel "Audit Log Terbaru" di
+      // halaman Pengaturan sebelumnya HARDCODE 3 baris contoh statis di HTML
+      // (nama "Budi Santoso"/"Rina Wulandari" dkk) dan tidak pernah diganti
+      // data asli — padahal tabel credential_audit_log & RLS admin-only-nya
+      // sudah lama ada. Query di sini yang sebelumnya tidak pernah ditulis.
+      // RLS: hanya admin yang bisa SELECT tabel ini (audit_select_admin) —
+      // untuk role lain, ini akan mengembalikan array kosong (bukan error),
+      // itu memang perilaku yang diinginkan, bukan bug.
+      sb.from('credential_audit_log').select('*').order('created_at', {ascending:false}).limit(30)
     ]);
     sites = sRes.data || [];
     customers = cRes.data || [];
@@ -2420,6 +2463,10 @@
     genieacsDevices = gaRes.data || [];
     // genieacs_config: RLS admin-only select — non-admin dapat array kosong (bukan error), normal.
     genieacsConfig = (gaCfgRes.data && gaCfgRes.data[0]) || null;
+    // credential_audit_log: RLS admin-only select juga — non-admin akan
+    // dapat array kosong (bukan error), itu memang disengaja (lihat panel
+    // "Audit Log Terbaru" yang otomatis kosong/tersembunyi untuk non-admin).
+    credentialAuditLog = calRes.data || [];
     if(gaRes.error) console.error('genieacs_devices:', gaRes.error);
     if(sRes.error) console.error(sRes.error);
     if(cRes.error) console.error(cRes.error);
@@ -2438,6 +2485,7 @@
     if(itgLogRes.error) console.error('integration_logs:', itgLogRes.error);
     if(aiRes.error) console.error('ai_insights:', aiRes.error);
     if(nlRes.error) console.error('network_links:', nlRes.error);
+    if(calRes.error) console.error('credential_audit_log:', calRes.error);
   }
 
   function populateSiteSwitcher(){
@@ -2555,6 +2603,14 @@
         renderNotificationsPage();
         renderNotifBell();
       })
+      .on('postgres_changes', {event:'*', schema:'public', table:'credential_audit_log'}, async ()=>{
+        // RLS admin-only select — untuk role lain query ini akan selalu
+        // mengembalikan array kosong (bukan error), itu memang disengaja.
+        const { data, error } = await sb.from('credential_audit_log').select('*').order('created_at',{ascending:false}).limit(30);
+        if(error){ console.error('credential_audit_log:', error); return; }
+        credentialAuditLog = data || [];
+        renderAuditLogFeed();
+      })
       .on('postgres_changes', {event:'*', schema:'public', table:'integrations'}, async ()=>{
         const { data, error } = await sb.from('integrations').select('*').order('created_at',{ascending:false});
         if(error){ console.error('integrations:', error); return; }
@@ -2667,6 +2723,37 @@
     } else {
       deltaEl.textContent = thisRevenue > 0 ? 'belum ada data bulan lalu' : 'belum ada pembayaran bulan ini';
     }
+
+    renderStaleBanners();
+  }
+
+  // 🐛 FIX (dilaporkan pengguna 19 Jul 2026): kolom customers.status
+  // ('Aktif'/'Offline') SAAT INI hanya berubah lewat aksi manual admin
+  // (buat akun PPPoE, isolir/pulihkan) — TIDAK ADA proses yang menyinkronkan
+  // status ini dari sesi PPPoE aktif sungguhan di router. Akibatnya, kalau
+  // agent bahkan gagal terhubung ke server (lihat kartu di Pengaturan),
+  // dashboard & tabel pelanggan tetap menampilkan angka "Online" yang lama
+  // seolah-olah real-time — padahal tidak ada cara mengetahui status
+  // sungguhan pelanggan di server itu sekarang. Banner ini menampilkan
+  // keterbatasan itu secara jujur alih-alih diam-diam menyesatkan.
+  // Dipanggil dari renderKPIs() (Dashboard) & renderCustomerTable() (Pelanggan).
+  function renderStaleBanners(){
+    const relevantSites = currentSite==='all' ? sites : sites.filter(s=>s.id===currentSite);
+    const problemSites = relevantSites.filter(s=> s.agent_status!=='terhubung' || s.last_test_status==='failed');
+
+    const html = problemSites.length ? `
+      <div class="stale-banner">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01M10.3 3.9L2.9 17a2 2 0 001.7 3h14.8a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/></svg>
+        <div>
+          <strong>Status Online/Offline di bawah mungkin tidak real-time.</strong>
+          Kolom status pelanggan hanya berubah lewat tindakan manual (isolir/buat akun) — belum ada sinkronisasi otomatis dari sesi PPPoE aktif di router.
+          ${problemSites.map(s=>`Server <strong>${s.name}</strong> saat ini ${s.agent_status!=='terhubung'?'terputus dari agent':'gagal saat tes koneksi terakhir'}${s.last_sync?' (sinkron terakhir '+new Date(s.last_sync).toLocaleString('id-ID')+')':''}.`).join(' ')}
+        </div>
+      </div>
+    ` : '';
+
+    const d1 = document.getElementById('dashboard-stale-banner'); if(d1) d1.innerHTML = html;
+    const d2 = document.getElementById('customers-stale-banner'); if(d2) d2.innerHTML = html;
   }
 
   // Agregasi nyata dari connection_logs (24 jam terakhir, per 3 jam).
@@ -2743,8 +2830,11 @@
         <td data-label="Status"><span class="badge ${statusClass(c.status)}"><span class="sw" style="background:${statusColor(c.status)}"></span>${c.status}</span></td>
         <td class="mono-cell" data-label="Username">${c.pppoe_username||'—'}</td>
         <td style="white-space:nowrap;">
-          <button class="row-link" onclick="event.stopPropagation(); openCustomerModal('edit','${c.id}')">Edit</button>
-          <button class="row-link" onclick="event.stopPropagation(); openDrawer('${c.id}')">Lihat →</button>
+          <span class="row-actions">
+            <button class="row-link" onclick="event.stopPropagation(); openCustomerModal('edit','${c.id}')">Edit</button>
+            <span class="sep"></span>
+            <button class="row-link" onclick="event.stopPropagation(); openDrawer('${c.id}')">Lihat →</button>
+          </span>
         </td>
       `;
       tb.appendChild(tr);
@@ -2804,6 +2894,48 @@
     if(!list.length){
       el.innerHTML = '<div class="empty-note">Belum ada server terdaftar — klik "+ Tambah Server / MikroTik" untuk mulai.</div>';
     }
+  }
+
+  // 🐛 FIX (dilaporkan pengguna 19 Jul 2026): panel ini sebelumnya HTML
+  // statis (3 baris contoh hardcode, tidak pernah berubah). Sekarang
+  // ditarik dari tabel credential_audit_log (RLS admin-only — untuk role
+  // lain, query di fetchAll() akan selalu mengembalikan array kosong,
+  // sehingga panel otomatis menampilkan pesan kosong yang sesuai, bukan
+  // error). Diberi konteks "site" via customer/voucher terkait supaya ikut
+  // site-switcher seperti panel lain.
+  function renderAuditLogFeed(){
+    const el = document.getElementById('audit-log-feed'); if(!el) return;
+
+    if(!profile || profile.role !== 'admin'){
+      el.innerHTML = '<div class="empty-note">Hanya admin yang bisa melihat audit log akses kredensial.</div>';
+      return;
+    }
+
+    const rows = credentialAuditLog.filter(row=>{
+      const cust = row.customer_id ? customers.find(c=>c.id===row.customer_id) : null;
+      const vou = row.voucher_id ? vouchers.find(v=>v.id===row.voucher_id) : null;
+      const siteId = cust?.site_id || vou?.site_id;
+      return currentSite==='all' || !siteId || siteId===currentSite;
+    }).slice(0, 8);
+
+    if(!rows.length){
+      el.innerHTML = '<div class="empty-note">Belum ada aktivitas akses kredensial tercatat untuk server ini.</div>';
+      return;
+    }
+
+    el.innerHTML = rows.map(row=>{
+      const actor = allProfiles.find(p=>p.id===row.actor);
+      const actorName = actor ? actor.full_name : 'user tidak dikenal';
+      const cust = row.customer_id ? customers.find(c=>c.id===row.customer_id) : null;
+      const vou = row.voucher_id ? vouchers.find(v=>v.id===row.voucher_id) : null;
+      const actionLabel = {
+        view_password:   `${actorName} melihat sandi PPPoE — ${cust ? cust.name : 'pelanggan tidak ditemukan'}`,
+        change_password: `${actorName} mengganti sandi — ${cust ? cust.name : 'pelanggan tidak ditemukan'}`,
+        view_voucher:     `${actorName} melihat kode voucher — ${vou ? vou.id.slice(0,8) : 'voucher tidak ditemukan'}`
+      }[row.action] || `${actorName} — ${row.action}`;
+      const dotColor = row.action==='change_password' ? 'var(--iso)' : 'var(--wire-blue)';
+      return `<div class="feed-row"><span class="dot" style="background:${dotColor}"></span><span class="who">${actionLabel}</span><span class="when">${timeAgo(row.created_at)}</span></div>`;
+    }).join('');
   }
 
   // ---------- SITE / MIKROTIK CONNECTION CRUD ----------
@@ -6023,6 +6155,7 @@
     renderVoucherTable();
     renderTeamTable();
     renderAgents();
+    renderAuditLogFeed();
     renderDevicesTree();
     renderMikrotikPage();
     renderTicketsPage();
