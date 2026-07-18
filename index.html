@@ -725,6 +725,9 @@
           <h2>Pelanggan</h2>
           <p>Data pelanggan, akses jaringan, dan kredensial PPPoE.</p>
         </div>
+        <div class="device-toolbar">
+          <button class="btn btn-primary" style="width:auto; padding:9px 16px;" onclick="openCustomerModal()">+ Tambah Pelanggan</button>
+        </div>
         <div class="table-wrap">
           <table>
             <thead>
@@ -1596,6 +1599,7 @@
   <div class="drawer-actions">
     <button class="btn btn-ghost" onclick="regenPassword()">Ganti Sandi</button>
     <button class="btn btn-danger" id="d-toggle-status" onclick="toggleIsolir()">Isolir Pelanggan</button>
+    <button class="btn btn-ghost" style="color:var(--off); border-color:var(--off);" onclick="confirmDeleteCustomer()">Hapus Pelanggan</button>
   </div>
 </div>
 
@@ -1673,8 +1677,8 @@
       </div>
       <div class="field">
         <label>Interface MikroTik — opsional, untuk trafik OTOMATIS</label>
-        <input type="text" id="dm-mikrotik-interface" placeholder="mis. ether5 (persis nama interface di router)" oninput="onDeviceMikrotikInterfaceChange()">
-        <div class="audit-mini" style="margin-top:4px;">Isi HANYA kalau perangkat ini adalah router MikroTik itu sendiri dan Anda tahu persis nama interface uplink-nya (cek di Winbox → Interface). Kalau diisi, 2 kolom trafik di bawah akan otomatis diperbarui terus oleh agent tiap ±20 detik — TIDAK bisa diketik manual lagi selama field ini terisi. Untuk HTB/splitter pasif yang bukan MikroTik, biarkan kosong dan isi trafik manual seperti biasa.</div>
+        <select id="dm-mikrotik-interface" onchange="onDeviceMikrotikInterfaceChange()"></select>
+        <div class="audit-mini" style="margin-top:4px;">Isi HANYA kalau perangkat ini adalah router MikroTik itu sendiri. Daftar di bawah diambil LANGSUNG dari router (hanya port ether fisik) setelah server terhubung — kalau belum terkoneksi, tes koneksi dulu di halaman Pengaturan. Kalau dipilih, 2 kolom trafik di bawah akan otomatis diperbarui terus oleh agent tiap ±20 detik — TIDAK bisa diketik manual lagi selama field ini terisi. Untuk HTB/splitter pasif yang bukan MikroTik, biarkan kosong.</div>
       </div>
       <div class="field" style="display:flex; gap:10px;">
         <div style="flex:1;">
@@ -2055,6 +2059,56 @@
   </div>
 </div>
 
+<!-- CUSTOMER MODAL -->
+<div class="modal-overlay" id="customer-modal-overlay" onclick="if(event.target===this) closeCustomerModal()">
+  <div class="modal-box">
+    <div class="modal-head">
+      <h3>Tambah Pelanggan</h3>
+      <button class="drawer-close" onclick="closeCustomerModal()">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <label>Server</label>
+        <select id="cu-site"></select>
+      </div>
+      <div class="field">
+        <label>Nama Pelanggan</label>
+        <input type="text" id="cu-name" placeholder="mis. Budi Santoso">
+      </div>
+      <div class="field">
+        <label>ID Pelanggan</label>
+        <input type="text" id="cu-code" placeholder="mis. CUST-0001">
+      </div>
+      <div class="field">
+        <label>Alamat — opsional</label>
+        <input type="text" id="cu-address" placeholder="mis. Jl. Merdeka No. 12">
+      </div>
+      <div class="field">
+        <label>Jenis Akses</label>
+        <select id="cu-access">
+          <option value="LAN_HUB">LAN / Hub (MikroTik PPPoE)</option>
+          <option value="OLT_GPON">OLT / GPON</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Paket — opsional</label>
+        <input type="text" id="cu-package" placeholder="mis. 20Mbps">
+      </div>
+      <div class="field">
+        <label>Username PPPoE — opsional</label>
+        <input type="text" id="cu-username" placeholder="mis. budi.santoso">
+        <div class="audit-mini" style="margin-top:4px;">Kalau username ini sudah ada sebagai PPP Secret di MikroTik, cukup isi persis sama — sistem akan menautkannya (bukan membuat ulang) begitu siklus live agent berjalan.</div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeCustomerModal()">Batal</button>
+      <button class="btn btn-primary" id="cu-save-btn" onclick="saveCustomer()">Simpan</button>
+    </div>
+  </div>
+</div>
+
 <!-- SITE / MIKROTIK MODAL -->
 <div class="modal-overlay" id="site-modal-overlay" onclick="if(event.target===this) closeSiteModal()">
   <div class="modal-box">
@@ -2166,6 +2220,7 @@
   let networkNodes = [];
   let networkLinks = [];
   let mikrotikCommands = [];
+  let siteEtherInterfaces = []; // site_ether_interfaces: daftar port ether live per server (dropdown Interface MikroTik)
   let notifications = [];
   let notificationReads = [];
   let currentUserId = null;
@@ -2283,7 +2338,7 @@
   // ---------- FETCH ----------
   async function fetchAll(){
     const since24h = new Date(Date.now() - 24*3600*1000).toISOString();
-    const [sRes, cRes, tRes, vRes, invRes, logRes, tkRes, ndRes, mkRes, ivRes, woRes, exRes, prRes, ntRes, nrRes, itgRes, itgLogRes, aiRes, gaRes, gaCfgRes, nlRes] = await Promise.all([
+    const [sRes, cRes, tRes, vRes, invRes, logRes, tkRes, ndRes, mkRes, ivRes, woRes, exRes, prRes, ntRes, nrRes, itgRes, itgLogRes, aiRes, gaRes, gaCfgRes, nlRes, seiRes] = await Promise.all([
       sb.from('sites').select('*').order('name'),
       sb.from('customers').select('*').order('name'),
       sb.from('technicians').select('*').order('name'),
@@ -2304,7 +2359,8 @@
       sb.from('ai_insights').select('*').order('created_at', {ascending:false}).limit(200),
       sb.from('genieacs_devices').select('*').order('updated_at', {ascending:false}),
       sb.from('genieacs_config').select('*').limit(1),
-      sb.from('network_links').select('*')
+      sb.from('network_links').select('*'),
+      sb.from('site_ether_interfaces').select('*')
     ]);
     sites = sRes.data || [];
     customers = cRes.data || [];
@@ -2327,6 +2383,7 @@
     workOrders = woRes.data || [];
     expenses = exRes.data || [];
     networkLinks = nlRes.data || [];
+    siteEtherInterfaces = seiRes.data || [];
     // RLS profiles_select mengembalikan SEMUA baris hanya untuk admin (is_admin()),
     // user lain hanya melihat baris miliknya sendiri — jadi ini aman di-fetch semua role.
     allProfiles = prRes.data || [];
@@ -2415,6 +2472,19 @@
         if(error){ console.error('mikrotik_commands:', error); return; }
         mikrotikCommands = data || [];
         renderMikrotikPage();
+      })
+      .on('postgres_changes', {event:'*', schema:'public', table:'site_ether_interfaces'}, async ()=>{
+        const { data, error } = await sb.from('site_ether_interfaces').select('*');
+        if(error){ console.error('site_ether_interfaces:', error); return; }
+        siteEtherInterfaces = data || [];
+        // Kalau modal Edit Perangkat sedang terbuka, refresh dropdown-nya langsung
+        // (biar tidak perlu tutup-buka modal lagi setelah router baru saja terkoneksi)
+        const overlay = document.getElementById('device-modal-overlay');
+        if(overlay && overlay.classList.contains('open')){
+          const siteId = document.getElementById('dm-site').value;
+          const current = document.getElementById('dm-mikrotik-interface').value;
+          populateEtherInterfaceSelect(siteId, current);
+        }
       })
       .on('postgres_changes', {event:'*', schema:'public', table:'genieacs_devices'}, async ()=>{
         const { data, error } = await sb.from('genieacs_devices').select('*').order('updated_at', {ascending:false});
@@ -2718,6 +2788,75 @@
       portInput.value = tls ? '8729' : '8728';
     }
   }
+  // ---------- CUSTOMER: Tambah & Hapus Pelanggan ----------
+  function openCustomerModal(){
+    const sel = document.getElementById('cu-site');
+    sel.innerHTML = sites.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+    sel.value = currentSite!=='all' ? currentSite : (sites[0] && sites[0].id) || '';
+
+    document.getElementById('cu-name').value = '';
+    document.getElementById('cu-code').value = '';
+    document.getElementById('cu-address').value = '';
+    document.getElementById('cu-access').value = 'LAN_HUB';
+    document.getElementById('cu-package').value = '';
+    document.getElementById('cu-username').value = '';
+    document.getElementById('customer-modal-overlay').classList.add('open');
+  }
+  function closeCustomerModal(){
+    document.getElementById('customer-modal-overlay').classList.remove('open');
+  }
+  async function saveCustomer(){
+    const siteId = document.getElementById('cu-site').value;
+    const name = document.getElementById('cu-name').value.trim();
+    const code = document.getElementById('cu-code').value.trim();
+    const address = document.getElementById('cu-address').value.trim();
+    const accessType = document.getElementById('cu-access').value;
+    const pkg = document.getElementById('cu-package').value.trim();
+    const username = document.getElementById('cu-username').value.trim();
+
+    if(!siteId){ showToast('Pilih server terlebih dahulu'); return; }
+    if(!name || !code){ showToast('Nama dan ID Pelanggan wajib diisi'); return; }
+
+    const btn = document.getElementById('cu-save-btn');
+    btn.disabled = true; btn.textContent = 'Menyimpan…';
+    try {
+      const payload = {
+        site_id: siteId, customer_code: code, name,
+        address: address || null, access_type: accessType,
+        package: pkg || null, pppoe_username: username || null,
+        status: 'Offline'
+      };
+      const { error } = await sb.from('customers').insert(payload);
+      if(error){ showToast('Gagal menyimpan pelanggan: ' + error.message); return; }
+
+      const { data, error: reErr } = await sb.from('customers').select('*').order('name');
+      if(!reErr) customers = data || [];
+      renderCustomerTable(document.getElementById('global-search').value);
+      closeCustomerModal();
+      showToast('Pelanggan berhasil ditambahkan');
+    } catch(e){
+      showToast('Terjadi kesalahan: ' + (e && e.message ? e.message : String(e)));
+    } finally {
+      btn.disabled = false; btn.textContent = 'Simpan';
+    }
+  }
+  async function confirmDeleteCustomer(){
+    const c = customers.find(c=>c.id===currentCustomerId);
+    if(!c) return;
+    const typed = prompt(`Menghapus pelanggan "${c.name}" akan menghapus juga riwayat tiket & invoice yang tertaut.\nTindakan ini tidak bisa dibatalkan.\n\nKetik persis "${c.name}" untuk konfirmasi hapus:`);
+    if(typed === null) return;
+    if(typed.trim() !== c.name.trim()){ showToast('Nama tidak cocok — penghapusan dibatalkan'); return; }
+
+    const { error } = await sb.from('customers').delete().eq('id', c.id);
+    if(error){ showToast('Gagal menghapus pelanggan: ' + error.message); return; }
+
+    const { data, error: reErr } = await sb.from('customers').select('*').order('name');
+    if(!reErr) customers = data || [];
+    renderCustomerTable(document.getElementById('global-search').value);
+    closeDrawer();
+    showToast(`Pelanggan "${c.name}" berhasil dihapus`);
+  }
+
   function openSiteModal(siteId){
     editingSiteId = siteId || null;
     const s = editingSiteId ? sites.find(s=>s.id===editingSiteId) : null;
@@ -3919,6 +4058,29 @@
     sel.innerHTML = sites.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
     sel.value = selectedSiteId || (currentSite!=='all' ? currentSite : (sites[0] && sites[0].id) || '');
   }
+  function populateEtherInterfaceSelect(siteId, currentValue){
+    const sel = document.getElementById('dm-mikrotik-interface');
+    const ethers = siteEtherInterfaces.filter(e=>e.site_id===siteId);
+    let html = '<option value="">— Tidak ada / bukan router MikroTik —</option>';
+    if(!ethers.length){
+      html += `<option value="" disabled>⚠ Belum terkoneksi — tes koneksi dulu di Pengaturan</option>`;
+      // Kalau perangkat ini SEBELUMNYA sudah pernah diisi interface tertentu
+      // (tersimpan di database) tapi router sedang tidak terkoneksi sekarang,
+      // tetap tampilkan sebagai opsi supaya datanya tidak hilang saat disimpan ulang.
+      if(currentValue){
+        html += `<option value="${currentValue}" selected>${currentValue} (tersimpan, router sedang tidak terkoneksi)</option>`;
+      }
+    } else {
+      ethers.forEach(e=>{
+        html += `<option value="${e.name}">${e.name}${e.running?' — aktif':' — tidak aktif'}</option>`;
+      });
+      if(currentValue && !ethers.some(e=>e.name===currentValue)){
+        html += `<option value="${currentValue}">${currentValue} (tersimpan, tidak terlihat di router saat ini)</option>`;
+      }
+    }
+    sel.innerHTML = html;
+    sel.value = currentValue || '';
+  }
   function populateDeviceParentSelect(siteId, excludeId){
     const sel = document.getElementById('dm-parent');
     const candidates = networkNodes.filter(n => n.site_id===siteId && n.id!==excludeId);
@@ -3980,7 +4142,8 @@
     document.getElementById('dm-parent-port').value = node ? (node.parent_port||'') : '';
     document.getElementById('dm-traffic-down').value = node && node.traffic_down_mbps!=null ? node.traffic_down_mbps : '';
     document.getElementById('dm-traffic-up').value = node && node.traffic_up_mbps!=null ? node.traffic_up_mbps : '';
-    document.getElementById('dm-mikrotik-interface').value = node && node.mikrotik_interface ? node.mikrotik_interface : '';
+    const initialSiteId = node ? node.site_id : (currentSite!=='all' ? currentSite : (sites[0] && sites[0].id));
+    populateEtherInterfaceSelect(initialSiteId, node ? node.mikrotik_interface : '');
     onDeviceMikrotikInterfaceChange();
     document.getElementById('dm-latlng-paste').value = '';
     onDeviceTypeChange();
@@ -4006,6 +4169,8 @@
       populateDeviceParentSelect(newSiteId, node ? node.id : null);
       populateDeviceCustomerSelect(newSiteId, node ? node.id : null);
       populateParentPortSelect();
+      populateEtherInterfaceSelect(newSiteId, ''); // ganti server = interface lama tidak relevan lagi
+      onDeviceMikrotikInterfaceChange();
     };
 
     document.getElementById('device-modal-overlay').classList.add('open');
