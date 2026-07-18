@@ -1392,17 +1392,63 @@
         </div>
       </div>
 
-      <!-- PAGE: GENIEACS (Coming Soon) -->
+      <!-- PAGE: GENIEACS -->
       <div class="page" id="page-genieacs">
         <div class="page-head">
           <h2>GenieACS</h2>
-          <p>Auto Configuration Server (TR-069) untuk manajemen ONT/CPE pelanggan dari jarak jauh.</p>
+          <p>Auto Configuration Server (TR-069) untuk manajemen ONT/CPE pelanggan dari jarak jauh — data disinkron oleh <span class="mono-cell">genieacs-agent.mjs</span> di VPS Anda, perintah dikirim lewat antrean <span class="mono-cell">acs_commands</span>.</p>
         </div>
-        <div class="card" style="text-align:center; padding:56px 24px; display:flex; flex-direction:column; align-items:center; gap:14px;">
-          <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="var(--ink-3)" stroke-width="1.4"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5l3.5 2"/></svg>
-          <h3 style="margin:0;">Sedang dalam pengembangan</h3>
-          <p class="muted" style="max-width:460px; margin:0;">Modul GenieACS belum tersedia — belum ada integrasi TR-069 nyata ke ONT/CPE pelanggan di repo ini (lihat gap constitution §8). Halaman ini disiapkan sebagai placeholder sesuai urutan 18 modul tetap, menunggu implementasi lanjutan.</p>
-          <span class="chip" style="pointer-events:none;">Coming Soon</span>
+
+        <div class="card" id="genieacs-config-card" style="margin-bottom:18px;">
+          <div class="card-head"><h3>Pengaturan GenieACS</h3><span class="muted">admin only · singleton</span></div>
+          <div class="voucher-form">
+            <div class="field">
+              <label>NBI URL</label>
+              <input type="text" id="ga-nbi-url" placeholder="mis. http://127.0.0.1:7557">
+            </div>
+            <div class="field">
+              <label>Basic Auth User — opsional</label>
+              <input type="text" id="ga-nbi-user" placeholder="kosongkan jika NBI hanya localhost">
+            </div>
+            <div class="field">
+              <label>Basic Auth Password — opsional</label>
+              <input type="password" id="ga-nbi-password" placeholder="kosongkan jika tidak ingin mengubah">
+            </div>
+            <button class="btn btn-primary" style="width:auto; padding:10px 18px;" onclick="saveGenieAcsConfig()" id="ga-config-save-btn">Simpan</button>
+          </div>
+          <div class="audit-mini" style="margin-top:8px;">Password write-only — sama pola dengan kredensial MikroTik/PPPoE. Lihat <span class="mono-cell">genieacs/README.md</span> untuk cara menjalankan GenieACS sungguhan di VPS.</div>
+        </div>
+
+        <div class="kpi-row">
+          <div class="kpi">
+            <div class="lbl">Total Device</div>
+            <div class="num" id="ga-kpi-total">—</div>
+            <div class="delta">ONT/CPE tersinkron dari GenieACS</div>
+          </div>
+          <div class="kpi">
+            <div class="lbl"><span class="sw" style="background:var(--on)"></span>Online</div>
+            <div class="num" id="ga-kpi-online">—</div>
+            <div class="delta">inform &lt; 5 menit terakhir</div>
+          </div>
+          <div class="kpi">
+            <div class="lbl"><span class="sw" style="background:var(--off)"></span>Offline</div>
+            <div class="num" id="ga-kpi-offline">—</div>
+            <div class="delta">tidak inform &gt; 5 menit</div>
+          </div>
+          <div class="kpi">
+            <div class="lbl">Belum Tercocok Pelanggan</div>
+            <div class="num" id="ga-kpi-unmatched">—</div>
+            <div class="delta">username PPPoE tidak ditemukan</div>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Serial</th><th>Model</th><th>Pelanggan</th><th>SSID</th><th>RX Power</th><th>Status</th><th>Inform Terakhir</th><th></th></tr>
+            </thead>
+            <tbody id="genieacs-tbody"></tbody>
+          </table>
         </div>
       </div>
 
@@ -1952,6 +1998,33 @@
   </div>
 </div>
 
+<!-- GENIEACS WIFI MODAL -->
+<div class="modal-overlay" id="ga-wifi-modal-overlay" onclick="if(event.target===this) closeGaWifiModal()">
+  <div class="modal-box">
+    <div class="modal-head">
+      <h3>Ganti WiFi Device</h3>
+      <button class="drawer-close" onclick="closeGaWifiModal()">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <label>SSID Baru — kosongkan jika tidak diubah</label>
+        <input type="text" id="ga-wifi-ssid" placeholder="mis. NexusNOC-Budi">
+      </div>
+      <div class="field">
+        <label>Password WiFi Baru — kosongkan jika tidak diubah</label>
+        <input type="text" id="ga-wifi-password" placeholder="minimal 8 karakter">
+      </div>
+      <div class="audit-mini">Perintah dikirim ke antrean <span class="mono-cell">acs_commands</span> dan dieksekusi agent dalam beberapa detik (device harus online / mendukung connection request).</div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeGaWifiModal()">Batal</button>
+      <button class="btn btn-primary" id="ga-wifi-save-btn" onclick="submitGaWifiChange()">Kirim</button>
+    </div>
+  </div>
+</div>
+
 <div id="toast-container"></div>
 
 <script>
@@ -1997,6 +2070,9 @@
   let integrationFilter = 'all';
   let editingIntegrationId = null;
   let aiInsights = [];               // riwayat baris tabel ai_insights (diagnosis tiket + prediksi churn)
+  let genieacsDevices = [];          // cache device ONT/CPE, disinkron agent dari GenieACS NBI
+  let genieacsConfig = null;         // { nbi_url, basic_auth_user } — password tidak pernah dikirim ke browser
+  let gaWifiDeviceId = null;         // device_id yang sedang dibuka di modal ganti WiFi
   let aiTicketBusy = new Set();      // id tiket yang sedang diproses (biar tombol tidak diklik dobel)
   let aiChurnBusy = false;
   let currentSite = 'all';
@@ -2102,7 +2178,7 @@
   // ---------- FETCH ----------
   async function fetchAll(){
     const since24h = new Date(Date.now() - 24*3600*1000).toISOString();
-    const [sRes, cRes, tRes, vRes, invRes, logRes, tkRes, ndRes, mkRes, ivRes, woRes, exRes, prRes, ntRes, nrRes, itgRes, itgLogRes, aiRes] = await Promise.all([
+    const [sRes, cRes, tRes, vRes, invRes, logRes, tkRes, ndRes, mkRes, ivRes, woRes, exRes, prRes, ntRes, nrRes, itgRes, itgLogRes, aiRes, gaRes, gaCfgRes] = await Promise.all([
       sb.from('sites').select('*').order('name'),
       sb.from('customers').select('*').order('name'),
       sb.from('technicians').select('*').order('name'),
@@ -2120,7 +2196,9 @@
       sb.from('notification_reads').select('*'),
       sb.from('integrations').select('*').order('created_at', {ascending:false}),
       sb.from('integration_logs').select('*').order('created_at', {ascending:false}).limit(200),
-      sb.from('ai_insights').select('*').order('created_at', {ascending:false}).limit(200)
+      sb.from('ai_insights').select('*').order('created_at', {ascending:false}).limit(200),
+      sb.from('genieacs_devices').select('*').order('updated_at', {ascending:false}),
+      sb.from('genieacs_config').select('*').limit(1)
     ]);
     sites = sRes.data || [];
     customers = cRes.data || [];
@@ -2146,6 +2224,10 @@
     integrations = itgRes.data || [];
     integrationLogs = itgLogRes.data || [];
     aiInsights = aiRes.data || [];
+    genieacsDevices = gaRes.data || [];
+    // genieacs_config: RLS admin-only select — non-admin dapat array kosong (bukan error), normal.
+    genieacsConfig = (gaCfgRes.data && gaCfgRes.data[0]) || null;
+    if(gaRes.error) console.error('genieacs_devices:', gaRes.error);
     if(sRes.error) console.error(sRes.error);
     if(cRes.error) console.error(cRes.error);
     if(invRes.error) console.error(invRes.error);
@@ -2214,6 +2296,12 @@
         if(error){ console.error('mikrotik_commands:', error); return; }
         mikrotikCommands = data || [];
         renderMikrotikPage();
+      })
+      .on('postgres_changes', {event:'*', schema:'public', table:'genieacs_devices'}, async ()=>{
+        const { data, error } = await sb.from('genieacs_devices').select('*').order('updated_at', {ascending:false});
+        if(error){ console.error('genieacs_devices:', error); return; }
+        genieacsDevices = data || [];
+        renderGenieAcsPage();
       })
       .on('postgres_changes', {event:'*', schema:'public', table:'inventory_items'}, async ()=>{
         const { data, error } = await sb.from('inventory_items').select('*').order('name');
@@ -2569,6 +2657,126 @@
     const { error } = await sb.rpc('queue_mikrotik_test', { p_site_id: siteId });
     if(error){ showToast('Gagal mengantre tes koneksi: ' + error.message); return; }
     showToast('Tes koneksi dikirim ke agent — hasil muncul di kartu server dalam beberapa detik');
+  }
+
+  // ---------- GENIEACS ----------
+  function renderGenieAcsPage(){
+    document.getElementById('ga-nbi-url').value = genieacsConfig ? (genieacsConfig.nbi_url||'') : '';
+    document.getElementById('ga-nbi-user').value = genieacsConfig ? (genieacsConfig.basic_auth_user||'') : '';
+    document.getElementById('ga-nbi-password').placeholder = genieacsConfig ? 'kosongkan jika tidak ingin mengubah' : 'kosongkan jika NBI hanya localhost';
+
+    const scoped = genieacsDevices.filter(d => currentSite==='all' || d.site_id===currentSite);
+    const online = scoped.filter(d=>d.online).length;
+    const unmatched = scoped.filter(d=>!d.customer_id).length;
+    document.getElementById('ga-kpi-total').textContent = scoped.length;
+    document.getElementById('ga-kpi-online').textContent = online;
+    document.getElementById('ga-kpi-offline').textContent = scoped.length - online;
+    document.getElementById('ga-kpi-unmatched').textContent = unmatched;
+
+    const tb = document.getElementById('genieacs-tbody'); tb.innerHTML = '';
+    scoped.forEach(d=>{
+      const cust = d.customer_id ? customers.find(c=>c.id===d.customer_id) : null;
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td class="mono-cell" data-label="Serial">${d.serial_number || '—'}</td>
+        <td data-label="Model">${[d.manufacturer, d.model].filter(Boolean).join(' ') || '—'}</td>
+        <td data-label="Pelanggan">${cust ? cust.name : '<span class="muted">belum tercocok</span>'}</td>
+        <td class="mono-cell" data-label="SSID">${d.ssid || '—'}</td>
+        <td data-label="RX Power">${d.rx_power!=null ? d.rx_power+' dBm' : '—'}</td>
+        <td data-label="Status"><span class="badge ${d.online?'on':'off'}"><span class="sw" style="background:${d.online?'var(--on)':'var(--off)'}"></span>${d.online?'Online':'Offline'}</span></td>
+        <td class="mono-cell" data-label="Inform Terakhir">${d.last_inform ? timeAgo(d.last_inform) : '—'}</td>
+        <td>
+          <div style="display:flex; gap:6px; flex-wrap:wrap;">
+            <button class="btn btn-ghost" style="width:auto; padding:6px 10px; font-size:11.5px;" onclick="rebootGaDevice('${d.device_id}')">Reboot</button>
+            <button class="btn btn-ghost" style="width:auto; padding:6px 10px; font-size:11.5px;" onclick="openGaWifiModal('${d.device_id}')">Ganti WiFi</button>
+            <button class="btn btn-ghost" style="width:auto; padding:6px 10px; font-size:11.5px;" onclick="refreshGaDevice('${d.device_id}')">Refresh</button>
+          </div>
+        </td>
+      `;
+      tb.appendChild(tr);
+    });
+    if(!tb.children.length){
+      tb.innerHTML = '<tr><td colspan="8" class="empty-note">Belum ada device tersinkron. Pastikan GenieACS &amp; genieacs-agent.mjs sudah jalan di VPS — lihat genieacs/README.md.</td></tr>';
+    }
+  }
+
+  async function saveGenieAcsConfig(){
+    const nbiUrl = document.getElementById('ga-nbi-url').value.trim();
+    const user = document.getElementById('ga-nbi-user').value.trim();
+    const pass = document.getElementById('ga-nbi-password').value;
+    if(!nbiUrl){ showToast('NBI URL wajib diisi'); return; }
+
+    const btn = document.getElementById('ga-config-save-btn');
+    btn.disabled = true; btn.textContent = 'Menyimpan…';
+    try {
+      const { error } = await sb.rpc('upsert_genieacs_config', {
+        p_nbi_url: nbiUrl, p_basic_auth_user: user || null, p_basic_auth_password: pass || null
+      });
+      if(error){ showToast('Gagal menyimpan konfigurasi: ' + error.message); return; }
+      document.getElementById('ga-nbi-password').value = '';
+      const { data } = await sb.from('genieacs_config').select('*').limit(1);
+      genieacsConfig = (data && data[0]) || null;
+      showToast('Konfigurasi GenieACS disimpan');
+    } catch(e){
+      showToast('Terjadi kesalahan: ' + (e && e.message ? e.message : String(e)));
+    } finally {
+      btn.disabled = false; btn.textContent = 'Simpan';
+    }
+  }
+
+  function gaDeviceSite(deviceId){
+    const d = genieacsDevices.find(d=>d.device_id===deviceId);
+    return d ? d.site_id : (currentSite!=='all' ? currentSite : (sites[0] && sites[0].id));
+  }
+
+  async function rebootGaDevice(deviceId){
+    if(!confirm('Reboot device ini sekarang? Koneksi pelanggan akan terputus sementara.')) return;
+    const { error } = await sb.rpc('queue_acs_command', {
+      p_site_id: gaDeviceSite(deviceId), p_device_id: deviceId, p_command: 'reboot', p_params: {}
+    });
+    if(error){ showToast('Gagal mengantre perintah reboot: ' + error.message); return; }
+    showToast('Perintah reboot dikirim ke antrean — diproses agent dalam beberapa detik');
+  }
+
+  async function refreshGaDevice(deviceId){
+    const { error } = await sb.rpc('queue_acs_command', {
+      p_site_id: gaDeviceSite(deviceId), p_device_id: deviceId, p_command: 'refresh', p_params: {}
+    });
+    if(error){ showToast('Gagal mengantre perintah refresh: ' + error.message); return; }
+    showToast('Perintah refresh dikirim ke antrean');
+  }
+
+  function openGaWifiModal(deviceId){
+    gaWifiDeviceId = deviceId;
+    document.getElementById('ga-wifi-ssid').value = '';
+    document.getElementById('ga-wifi-password').value = '';
+    document.getElementById('ga-wifi-modal-overlay').classList.add('open');
+  }
+  function closeGaWifiModal(){
+    document.getElementById('ga-wifi-modal-overlay').classList.remove('open');
+    gaWifiDeviceId = null;
+  }
+  async function submitGaWifiChange(){
+    const ssid = document.getElementById('ga-wifi-ssid').value.trim();
+    const password = document.getElementById('ga-wifi-password').value;
+    if(!ssid && !password){ showToast('Isi SSID dan/atau password baru dulu'); return; }
+    if(password && password.length < 8){ showToast('Password WiFi minimal 8 karakter'); return; }
+
+    const btn = document.getElementById('ga-wifi-save-btn');
+    btn.disabled = true; btn.textContent = 'Mengirim…';
+    try {
+      const params = {}; if(ssid) params.ssid = ssid; if(password) params.password = password;
+      const { error } = await sb.rpc('queue_acs_command', {
+        p_site_id: gaDeviceSite(gaWifiDeviceId), p_device_id: gaWifiDeviceId, p_command: 'set_wifi', p_params: params
+      });
+      if(error){ showToast('Gagal mengantre perintah: ' + error.message); return; }
+      showToast('Perintah ganti WiFi dikirim ke antrean');
+      closeGaWifiModal();
+    } catch(e){
+      showToast('Terjadi kesalahan: ' + (e && e.message ? e.message : String(e)));
+    } finally {
+      btn.disabled = false; btn.textContent = 'Kirim';
+    }
   }
 
   // ---------- MONITORING MIKROTIK (mikrotik_commands) ----------
@@ -4897,6 +5105,7 @@
     renderNotifBell();
     renderIntegrationsPage();
     renderAiAutomationPage();
+    renderGenieAcsPage();
   }
 
   // ---------- INIT ----------
