@@ -272,6 +272,13 @@
     width:220px; padding:8px 12px; border:1px solid var(--line-2); border-radius:8px;
     font-size:13px; background:var(--surface); color:var(--ink); box-shadow:var(--shadow-1);
   }
+  .addr-suggest-list{
+    width:220px; margin-top:4px; background:var(--surface); border:1px solid var(--line-2);
+    border-radius:8px; box-shadow:var(--shadow-1); max-height:220px; overflow-y:auto;
+  }
+  .addr-suggest-item{ padding:8px 12px; font-size:12.5px; cursor:pointer; border-bottom:1px solid var(--line); }
+  .addr-suggest-item:last-child{ border-bottom:none; }
+  .addr-suggest-item:hover, .addr-suggest-item.active{ background:var(--surface-2, #f1f5f9); }
   .topology-marker{ background:transparent; border:none; }
   #topology-map{ position:relative; }
   .topology-search-box{ position:absolute; top:10px; left:10px; z-index:5; }
@@ -2289,6 +2296,9 @@
   // dipakai tidak menyediakan raster/WMTS — HANYA style.json vektor ini yang
   // dipakai, jangan tambah source raster lain di sini.
   const MAPTILER_STYLE_URL = 'https://api.maptiler.com/maps/019f78b4-55eb-7cd5-99be-a926ebd6c72a/style.json?key=xJ6jrhuEdeiKizZBwJ4l';
+  // Key yang sama dipakai lagi untuk MapTiler Geocoding API (autocomplete alamat) —
+  // tidak perlu API key terpisah, satu key MapTiler bisa untuk style peta & geocoding.
+  const MAPTILER_KEY = new URL(MAPTILER_STYLE_URL).searchParams.get('key');
 
   let sites = [];
   let customers = [];
@@ -2832,13 +2842,9 @@
 
     const searchBox = document.createElement('div');
     searchBox.className = 'topology-search-box';
-    searchBox.innerHTML = `<input type="text" id="customer-map-search" placeholder="Cari alamat…">`;
+    searchBox.innerHTML = `<input type="text" id="customer-map-search" placeholder="Cari alamat…"><div class="addr-suggest-list" id="customer-map-search-list" style="display:none;"></div>`;
     mapEl.appendChild(searchBox);
-    document.addEventListener('keydown', (e)=>{
-      if(e.target && e.target.id==='customer-map-search' && e.key==='Enter'){
-        geocodeAndFlyGeneric(e.target.value, customerMapInstance);
-      }
-    });
+    attachAddressAutocomplete('customer-map-search', 'customer-map-search-list', customerMapInstance);
 
     customerMapInstance.on('click', (e)=>{
       if(placingNewCustomer){
@@ -4202,23 +4208,40 @@
     topologyMapInstance.on('load', ()=>{
       // Sumber kosong untuk jalur kabel — diisi setData() tiap renderTopologyMap()
       topologyMapInstance.addSource('links-source', { type:'geojson', data: { type:'FeatureCollection', features: [] } });
+      // CATATAN PERBAIKAN: MapLibre/Mapbox GL TIDAK MENGIZINKAN 'line-dasharray'
+      // berbasis data feature (["get","hasTraffic"]) — hanya boleh nilai tetap
+      // atau berbasis zoom ("data expressions not supported" adalah error resmi
+      // dari spec-nya, bukan bug MapTiler). Solusinya: pecah jadi 2 layer dengan
+      // FILTER (filter boleh berbasis data), satu solid untuk jalur tanpa
+      // trafik, satu dashed-animasi untuk jalur dengan trafik.
       topologyMapInstance.addLayer({
         id: 'links-layer', type:'line', source:'links-source',
+        filter: ['!', ['get','hasTraffic']],
         paint: {
           'line-color': ['get','color'],
-          'line-width': ['case', ['get','hasTraffic'], 4, 3],
+          'line-width': 3,
           'line-opacity': 0.85,
-          'line-dasharray': ['case', ['get','hasTraffic'], ['literal',[1,1.2]], ['literal',[1,0]]],
         },
       });
-      // Animasi "trafik berjalan" — geser fase dash tiap frame, hanya berlaku
-      // efeknya secara visual pada garis yang punya line-dasharray aktif.
+      topologyMapInstance.addLayer({
+        id: 'links-layer-active', type:'line', source:'links-source',
+        filter: ['==', ['get','hasTraffic'], true],
+        paint: {
+          'line-color': ['get','color'],
+          'line-width': 4,
+          'line-opacity': 0.85,
+          'line-dasharray': [1,1.2], // nilai TETAP, bukan expression — ini yang diizinkan
+        },
+      });
+      // Animasi "trafik berjalan" — geser fase dash tiap frame. HANYA layer
+      // dashed yang perlu (line-dasharray di sini nilai tetap per-layer, jadi
+      // aman disetPaintProperty ulang, bukan expression data lagi).
       let dashStep = 0;
       const dashSequences = [[0,4],[0.5,3.5],[1,3],[1.5,2.5],[2,2],[2.5,1.5],[3,1],[3.5,0.5]];
       function animateDash(){
-        if(!topologyMapInstance.getLayer('links-layer')) return;
+        if(!topologyMapInstance.getLayer('links-layer-active')) return;
         dashStep = (dashStep+1) % dashSequences.length;
-        topologyMapInstance.setPaintProperty('links-layer', 'line-dasharray', ['case', ['get','hasTraffic'], ['literal', dashSequences[dashStep]], ['literal',[1,0]]]);
+        topologyMapInstance.setPaintProperty('links-layer-active', 'line-dasharray', dashSequences[dashStep]);
         requestAnimationFrame(()=>setTimeout(animateDash, 90));
       }
       animateDash();
@@ -4226,14 +4249,12 @@
       renderTopologyMap();
     });
 
-    // Kotak cari alamat (geocoding lewat Nominatim/OpenStreetMap, gratis tanpa API key)
+    // Kotak cari alamat — autocomplete MapTiler Geocoding (muncul saat mengetik, key sama dengan peta)
     const searchBox = document.createElement('div');
     searchBox.className = 'topology-search-box';
-    searchBox.innerHTML = `<input type="text" id="topology-map-search" placeholder="Cari alamat…">`;
+    searchBox.innerHTML = `<input type="text" id="topology-map-search" placeholder="Cari alamat…"><div class="addr-suggest-list" id="topology-map-search-list" style="display:none;"></div>`;
     mapEl.appendChild(searchBox);
-    document.addEventListener('keydown', (e)=>{
-      if(e.target && e.target.id==='topology-map-search' && e.key==='Enter') geocodeAndFly(e.target.value);
-    });
+    attachAddressAutocomplete('topology-map-search', 'topology-map-search-list', topologyMapInstance);
 
     // Kotak status router live (CPU/RAM/Disk/Uptime) — sama seperti sebelumnya,
     // cuma DOM overlay biasa, bukan Leaflet control lagi.
@@ -4261,17 +4282,69 @@
     const q = (query||'').trim();
     if(!q || !mapInstance) return;
     try {
-      const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(q)}`);
-      const results = await res.json();
-      if(!results || !results.length){ showToast('Alamat tidak ditemukan'); return; }
-      const { lat, lon } = results[0];
-      mapInstance.flyTo({ center: [parseFloat(lon), parseFloat(lat)], zoom: 17 });
+      const res = await fetch(`https://api.maptiler.com/geocoding/${encodeURIComponent(q)}.json?key=${MAPTILER_KEY}&limit=1&language=id`);
+      const json = await res.json();
+      const feat = json && json.features && json.features[0];
+      if(!feat){ showToast('Alamat tidak ditemukan'); return; }
+      const [lon, lat] = feat.center;
+      mapInstance.flyTo({ center: [lon, lat], zoom: 17 });
     } catch(e){
       showToast('Gagal mencari alamat — coba lagi');
     }
   }
   async function geocodeAndFly(query){
     return geocodeAndFlyGeneric(query, topologyMapInstance);
+  }
+
+  // Autocomplete alamat — dropdown saran muncul SAAT MENGETIK (bukan harus
+  // tekan Enter dulu), pakai MapTiler Geocoding API (key sama dengan peta,
+  // sudah Anda punya, jadi tidak perlu API key terpisah). Dipakai bareng oleh
+  // Topologi Jaringan & Peta Pelanggan lewat satu fungsi ini.
+  function attachAddressAutocomplete(inputId, listId, mapInstance){
+    const input = document.getElementById(inputId);
+    const list = document.getElementById(listId);
+    if(!input || !list) return;
+    let debounceTimer = null;
+    let currentFeatures = [];
+
+    function closeList(){ list.style.display = 'none'; list.innerHTML = ''; currentFeatures = []; }
+
+    async function fetchSuggestions(q){
+      try {
+        const res = await fetch(`https://api.maptiler.com/geocoding/${encodeURIComponent(q)}.json?key=${MAPTILER_KEY}&autocomplete=true&limit=6&language=id`);
+        const json = await res.json();
+        currentFeatures = (json && json.features) || [];
+        if(!currentFeatures.length){ closeList(); return; }
+        list.innerHTML = currentFeatures.map((f,i) => `<div class="addr-suggest-item" data-idx="${i}">${f.place_name}</div>`).join('');
+        list.style.display = 'block';
+      } catch(e){ closeList(); }
+    }
+
+    input.addEventListener('input', () => {
+      const q = input.value.trim();
+      clearTimeout(debounceTimer);
+      if(q.length < 3){ closeList(); return; }
+      debounceTimer = setTimeout(() => fetchSuggestions(q), 350);
+    });
+
+    list.addEventListener('click', (e) => {
+      const item = e.target.closest('.addr-suggest-item');
+      if(!item) return;
+      const f = currentFeatures[parseInt(item.dataset.idx, 10)];
+      if(!f) return;
+      const [lon, lat] = f.center;
+      mapInstance.flyTo({ center: [lon, lat], zoom: 17 });
+      input.value = f.place_name;
+      closeList();
+    });
+
+    input.addEventListener('keydown', (e) => {
+      if(e.key === 'Enter'){ closeList(); geocodeAndFlyGeneric(input.value, mapInstance); }
+      if(e.key === 'Escape') closeList();
+    });
+    document.addEventListener('click', (e) => {
+      if(e.target !== input && !list.contains(e.target)) closeList();
+    });
   }
 
   function nodeLatLng(n){
@@ -4325,22 +4398,25 @@
     // Hover/klik jalur — daftarkan sekali saja (aman dipanggil ulang, listener lama otomatis tidak dobel karena handler sama & pakai flag)
     if(!topologyMapInstance._linksEventsBound){
       topologyMapInstance._linksEventsBound = true;
-      topologyMapInstance.on('mousemove', 'links-layer', (e)=>{
-        if(editPathMode) return;
-        topologyMapInstance.getCanvas().style.cursor = 'pointer';
-        const f = e.features[0]; if(!f) return;
-        const html = `<div class="topo-link-popup"><div class="tlp-title">${f.properties.typeLabel}</div><div class="tlp-row"><span>Menuju</span><span>${f.properties.deviceLabel}</span></div><div class="tlp-row"><span>Panjang kabel</span><span>${f.properties.cableLabel}</span></div>${f.properties.trafLabel ? `<div class="tlp-row"><span>Traffic</span><span>${f.properties.trafLabel}</span></div>` : ''}</div>`;
-        if(!topologyPopup) topologyPopup = new maplibregl.Popup({ closeButton:false, closeOnClick:false, offset:8 });
-        topologyPopup.setLngLat(e.lngLat).setHTML(html).addTo(topologyMapInstance);
-      });
-      topologyMapInstance.on('mouseleave', 'links-layer', ()=>{
-        topologyMapInstance.getCanvas().style.cursor = '';
-        if(topologyPopup) topologyPopup.remove();
-      });
-      topologyMapInstance.on('click', 'links-layer', (e)=>{
-        if(!editPathMode) return;
-        const f = e.features[0]; if(!f) return;
-        beginEditPath(f.properties.node_id);
+      // Dipasang ke KEDUA layer (solid & dashed) sejak jalur dipecah jadi 2 layer.
+      ['links-layer','links-layer-active'].forEach(layerId => {
+        topologyMapInstance.on('mousemove', layerId, (e)=>{
+          if(editPathMode) return;
+          topologyMapInstance.getCanvas().style.cursor = 'pointer';
+          const f = e.features[0]; if(!f) return;
+          const html = `<div class="topo-link-popup"><div class="tlp-title">${f.properties.typeLabel}</div><div class="tlp-row"><span>Menuju</span><span>${f.properties.deviceLabel}</span></div><div class="tlp-row"><span>Panjang kabel</span><span>${f.properties.cableLabel}</span></div>${f.properties.trafLabel ? `<div class="tlp-row"><span>Traffic</span><span>${f.properties.trafLabel}</span></div>` : ''}</div>`;
+          if(!topologyPopup) topologyPopup = new maplibregl.Popup({ closeButton:false, closeOnClick:false, offset:8 });
+          topologyPopup.setLngLat(e.lngLat).setHTML(html).addTo(topologyMapInstance);
+        });
+        topologyMapInstance.on('mouseleave', layerId, ()=>{
+          topologyMapInstance.getCanvas().style.cursor = '';
+          if(topologyPopup) topologyPopup.remove();
+        });
+        topologyMapInstance.on('click', layerId, (e)=>{
+          if(!editPathMode) return;
+          const f = e.features[0]; if(!f) return;
+          beginEditPath(f.properties.node_id);
+        });
       });
     }
 
