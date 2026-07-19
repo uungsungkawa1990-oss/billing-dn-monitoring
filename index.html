@@ -313,6 +313,20 @@
   /* ============ TABLE ============ */
   .table-wrap{ background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-m); overflow:hidden; box-shadow:var(--shadow-1); }
   table{ width:100%; border-collapse:collapse; font-size:12.8px; }
+  /* Khusus tabel Pelanggan: kalau nama/username panjang mendorong tabel lebih
+     lebar dari layar, .table-wrap di atas overflow:hidden akan MEMOTONG
+     HABIS kolom paling kanan (termasuk tombol "Lihat") tanpa scrollbar sama
+     sekali — bukan cuma butuh digeser, betul-betul hilang. Override di sini
+     scoped HANYA ke tabel ini (tidak menyentuh .table-wrap tabel lain di
+     app), plus kolom aksi paling kanan dibuat sticky supaya selalu terlihat
+     tanpa perlu geser sejauh apapun. */
+  .customers-table-wrap{ overflow-x:auto; }
+  .customers-table{ min-width:640px; }
+  .sticky-action-col{
+    position:sticky; right:0; background:var(--surface);
+    box-shadow:-6px 0 8px -6px rgba(0,0,0,.12);
+  }
+  tbody tr:hover .sticky-action-col{ background:#fafaf9; }
   thead th{
     text-align:left; padding:11px 16px; font-size:11px; text-transform:uppercase; letter-spacing:.4px;
     color:var(--ink-3); font-weight:600; border-bottom:1px solid var(--line); background:var(--surface-2);
@@ -511,8 +525,6 @@
 </style>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/3.6.2/maplibre-gl.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/3.6.2/maplibre-gl.min.js"></script>
-<script>window.initMap = function(){ window.__gmapsCallbackFired = true; };</script>
-<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAOVYRIgupAurZup5y1PRh8Ismb1A3lLao&libraries=places&callback=initMap" async defer></script>
 </head>
 <body>
 
@@ -769,10 +781,10 @@
         <div class="device-toolbar">
           <button class="btn btn-primary" style="width:auto; padding:9px 16px;" onclick="openCustomerModal()">+ Tambah Pelanggan</button>
         </div>
-        <div class="table-wrap">
-          <table>
+        <div class="table-wrap customers-table-wrap">
+          <table class="customers-table">
             <thead>
-              <tr><th>Nama</th><th>ID</th><th>Server</th><th>Akses</th><th>Paket</th><th>Status</th><th>Username PPPoE</th><th></th></tr>
+              <tr><th>Nama</th><th>ID</th><th>Server</th><th>Akses</th><th>Paket</th><th>Status</th><th>Username PPPoE</th><th class="sticky-action-col"></th></tr>
             </thead>
             <tbody id="customers-tbody"></tbody>
           </table>
@@ -917,15 +929,11 @@
             <button class="btn btn-primary" style="width:auto; padding:9px 16px;" onclick="startPlaceNewDevice()">+ Tambah Perangkat di Peta</button>
             <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
               <button class="chip" id="edit-path-toggle-btn" onclick="toggleEditPathMode()">✏️ Edit Jalur Kabel</button>
-              <button class="chip on" id="map-engine-maplibre-btn" onclick="switchMapEngine('maplibre')">MapLibre (Edit)</button>
-              <button class="chip" id="map-engine-google-btn" onclick="switchMapEngine('google')">Google Satelit (Referensi)</button>
               <span class="hint" id="map-mode-hint"></span>
             </div>
           </div>
-          <div class="audit-mini" id="map-engine-google-note" style="display:none; margin-bottom:8px;">Tampilan referensi visual saja (citra satelit Google) — tidak bisa menambah/menggeser perangkat atau mengedit jalur kabel di sini. Kembali ke "MapLibre (Edit)" untuk mengedit.</div>
 
           <div id="topology-map" style="height:560px; border-radius:12px; overflow:hidden; border:1px solid var(--line-2);"></div>
-          <div id="topology-map-google" style="display:none; height:560px; border-radius:12px; overflow:hidden; border:1px solid var(--line-2);"></div>
           <div class="map-legend" style="position:static; margin-top:8px; display:flex; flex-wrap:wrap; gap:12px; background:none; box-shadow:none; padding:0;">
             <div class="row"><span class="sw" style="background:#2563eb"></span>Router/MikroTik</div>
             <div class="row"><span class="sw" style="background:#0891b2"></span>OLT</div>
@@ -2781,7 +2789,7 @@
         <td data-label="Paket">${c.package||'—'}</td>
         <td data-label="Status"><span class="badge ${statusClass(c.status)}"><span class="sw" style="background:${statusColor(c.status)}"></span>${c.status}</span></td>
         <td class="mono-cell" data-label="Username">${c.pppoe_username||'—'}</td>
-        <td><button class="row-link" onclick="openDrawer('${c.id}')">Lihat →</button></td>
+        <td class="sticky-action-col"><button class="row-link" onclick="openDrawer('${c.id}')">Lihat →</button></td>
       `;
       tb.appendChild(tr);
     });
@@ -2899,14 +2907,24 @@
         address: address || null, access_type: accessType,
         package: pkg || null, pppoe_username: username || null
       };
-      let error;
+      let error, savedRows;
       if(editingCustomerId){
-        ({ error } = await sb.from('customers').update(payload).eq('id', editingCustomerId));
+        // .select() ditambahkan supaya kita tahu betulan ada baris yang
+        // berubah. Kalau RLS menolak UPDATE, Postgres/PostgREST TIDAK
+        // mengembalikan error — cuma 0 baris kembali — dan kode lama di sini
+        // tetap menganggap itu sukses ("Pelanggan berhasil diperbarui")
+        // padahal data di database sama sekali tidak berubah. Ini pola
+        // gejala yang cocok dengan laporan "bisa Lihat tapi tidak bisa Edit".
+        ({ data: savedRows, error } = await sb.from('customers').update(payload).eq('id', editingCustomerId).select());
       } else {
         payload.status = 'Offline';
-        ({ error } = await sb.from('customers').insert(payload));
+        ({ data: savedRows, error } = await sb.from('customers').insert(payload).select());
       }
       if(error){ showToast('Gagal menyimpan pelanggan: ' + error.message); return; }
+      if(editingCustomerId && (!savedRows || savedRows.length===0)){
+        showToast('Perubahan TIDAK tersimpan — kemungkinan akun Anda belum punya hak akses tulis ke server ini (RLS). Hubungi admin untuk cek hak akses.');
+        return;
+      }
 
       const { data, error: reErr } = await sb.from('customers').select('*').order('name');
       if(!reErr) customers = data || [];
@@ -3958,26 +3976,10 @@
   let editingWaypoints = [];      // salinan kerja [[lat,lng], ...] sebelum disimpan
   let placingNewDevice = false;
 
-  function switchTopologyView(mode, btn){
-    topologyViewMode = mode;
-    document.querySelectorAll('#page-topology [data-nt-view]').forEach(c=>c.classList.remove('on'));
-    btn.classList.add('on');
-    document.getElementById('topology-diagram-view').style.display = mode==='diagram' ? '' : 'none';
-    document.getElementById('topology-map-view').style.display = mode==='map' ? '' : 'none';
-    if(mode==='map'){
-      if(!topologyMapInstance) initTopologyMap();
-      setTimeout(()=>{ if(topologyMapInstance){ topologyMapInstance.invalidateSize(); renderTopologyMap(); } }, 60);
-    }
-  }
-
-  function renderTopologyMapIfActive(){
-    const pageEl = document.getElementById('page-topology');
-    if(topologyViewMode==='map' && pageEl && pageEl.classList.contains('active')){
-      if(!topologyMapInstance) initTopologyMap();
-      renderTopologyMap();
-    }
-  }
-
+  // (Catatan: fungsi switchTopologyView & renderTopologyMapIfActive versi final
+  // ada di bawah — sempat ada duplikat lama di sini yang masih pakai API
+  // Leaflet (.invalidateSize) padahal engine peta sudah MapLibre GL, sudah
+  // dibuang supaya tidak membingungkan pembaca kode berikutnya.)
   function switchTopologyView(mode, btn){
     topologyViewMode = mode;
     document.querySelectorAll('#page-topology [data-nt-view]').forEach(c=>c.classList.remove('on'));
@@ -3998,10 +4000,9 @@
     }
   }
 
-  // MapLibre GL sebagai ENGINE UTAMA untuk menggambar & mengedit jaringan FTTH
-  // (marker perangkat, jalur kabel, drag-to-move, edit waypoint). Google Maps
-  // (lihat initMap() & switchMapEngine() di bawah) HANYA tampilan referensi
-  // visual terpisah — tidak dipakai untuk mengedit apa pun, sesuai instruksi.
+  // MapLibre GL sebagai satu-satunya engine peta (Google Maps sudah dihapus
+  // karena API key expired — tidak ada tampilan referensi terpisah lagi,
+  // semua marker/drag-to-move/edit waypoint lewat MapLibre saja).
   //
   // Catatan koordinat: seluruh data di app ini (network_nodes.lat/lng,
   // network_links.waypoints) tetap disimpan sebagai [lat, lng] seperti
@@ -4276,8 +4277,6 @@
         }
       }
     }
-
-    if(mapEngineMode==='google') syncGoogleMapMarkers();
   }
 
   function startPlaceNewDevice(){
@@ -4397,81 +4396,7 @@
   }
 
   // =====================================================================
-  // GOOGLE MAPS — REFERENSI VISUAL SAJA (bukan engine editing). Diinisialisasi
-  // oleh callback resmi Google Maps JS API (lihat <script> tag di <head>).
-  // Marker di sini read-only (tidak draggable, klik tidak membuka modal edit)
-  // — kalau mau mengedit, harus balik ke tampilan "MapLibre (Edit)".
-  // =====================================================================
-  let googleMapInstance = null;
-  let googleMarkers = [];
-  let mapEngineMode = 'maplibre';
-  let googleMapsReady = false;
-
-  function initGoogleMapNow(){
-    // Logika asli — dipanggil lewat window.initMap (lihat serah-terima di
-    // bawah IIFE ini) begitu Google Maps JS API selesai dimuat, TIDAK PEDULI
-    // urutan loadingnya dibanding script utama ini (lihat stub awal di <head>).
-    googleMapsReady = true;
-    const el = document.getElementById('topology-map-google');
-    if(!el || googleMapInstance) return;
-    googleMapInstance = new google.maps.Map(el, {
-      center: { lat: -6.9, lng: 107.6 }, zoom: 13, mapTypeId: 'satellite',
-      streetViewControl: false, fullscreenControl: false, mapTypeControl: true,
-    });
-    if(mapEngineMode==='google') syncGoogleMapMarkers();
-  }
-  // Serah-terima dari stub di <head>: kalau Google Maps JS API SUDAH selesai
-  // load & sempat memanggil stub SEBELUM baris ini sempat jalan (script utama
-  // ini besar, butuh waktu parse), jalankan implementasi asli SEKARANG juga.
-  // Kalau BELUM, cukup pasang implementasi asli supaya dipanggil nanti.
-  window.initMap = initGoogleMapNow;
-  if(window.__gmapsCallbackFired) initGoogleMapNow();
-
-  function syncGoogleMapMarkers(){
-    if(!googleMapInstance) return;
-    googleMarkers.forEach(m=>m.setMap(null));
-    googleMarkers = [];
-    const scoped = networkNodes.filter(inSite).filter(n=>nodeLatLng(n));
-    const bounds = new google.maps.LatLngBounds();
-    scoped.forEach(n=>{
-      const ll = nodeLatLng(n);
-      const meta = deviceTypeMeta[n.type] || { color:'#94a3b8' };
-      const marker = new google.maps.Marker({
-        position: { lat: ll[0], lng: ll[1] }, map: googleMapInstance, title: deviceLabel(n),
-        icon: { path: google.maps.SymbolPath.CIRCLE, scale: 8, fillColor: meta.color, fillOpacity: 1, strokeColor:'#fff', strokeWeight: 2 },
-      });
-      googleMarkers.push(marker);
-      bounds.extend({ lat: ll[0], lng: ll[1] });
-    });
-    if(scoped.length) googleMapInstance.fitBounds(bounds);
-  }
-
-  function switchMapEngine(which){
-    mapEngineMode = which;
-    document.getElementById('map-engine-maplibre-btn').classList.toggle('on', which==='maplibre');
-    document.getElementById('map-engine-google-btn').classList.toggle('on', which==='google');
-    document.getElementById('topology-map').style.display = which==='maplibre' ? '' : 'none';
-    document.getElementById('topology-map-google').style.display = which==='google' ? '' : 'none';
-    document.getElementById('map-engine-google-note').style.display = which==='google' ? '' : 'none';
-
-    if(which==='google'){
-      if(!googleMapsReady){ showToast('Google Maps sedang dimuat, tunggu sebentar lalu coba lagi…'); return; }
-      if(!googleMapInstance) initMap();
-      setTimeout(()=>{
-        if(googleMapInstance){
-          google.maps.event.trigger(googleMapInstance, 'resize');
-          if(topologyMapInstance){
-            const c = topologyMapInstance.getCenter();
-            googleMapInstance.setCenter({ lat:c.lat, lng:c.lng });
-            googleMapInstance.setZoom(Math.round(topologyMapInstance.getZoom()));
-          }
-          syncGoogleMapMarkers();
-        }
-      }, 60);
-    } else {
-      setTimeout(()=>{ if(topologyMapInstance) topologyMapInstance.resize(); }, 60);
-    }
-  }
+  let mapEngineMode = 'maplibre'; // dipertahankan supaya kode lain yang cek variabel ini tidak error
 
 
   const PORTED_TYPES = ['htb','odp_splitter','odp_jointbox'];
