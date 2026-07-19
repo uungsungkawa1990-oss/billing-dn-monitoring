@@ -752,18 +752,15 @@
           <p>Klik titik untuk melihat detail pelanggan, kredensial PPPoE, dan status koneksi.</p>
         </div>
         <div class="map-toolbar">
+          <button class="btn btn-primary" style="width:auto; padding:8px 14px;" onclick="startPlaceNewCustomer()">+ Tambah Pelanggan di Peta</button>
           <button class="chip on" data-filter="all" onclick="filterMap('all', this)">Semua</button>
           <button class="chip" data-filter="Aktif" onclick="filterMap('Aktif', this)"><span class="sw" style="background:var(--on)"></span>Online</button>
           <button class="chip" data-filter="Offline" onclick="filterMap('Offline', this)"><span class="sw" style="background:var(--off)"></span>Offline</button>
           <button class="chip" data-filter="Isolir" onclick="filterMap('Isolir', this)"><span class="sw" style="background:var(--iso)"></span>Isolir</button>
+          <span class="hint" id="customer-map-mode-hint"></span>
         </div>
-        <div class="map-wrap">
-          <svg class="streets" viewBox="0 0 100 100" preserveAspectRatio="none">
-            <rect width="100" height="100" fill="#eef1ee"/>
-            <path d="M0 30 H100 M0 62 H100 M18 0 V100 M46 0 V100 M74 0 V100" stroke="#dfe3de" stroke-width="0.6"/>
-            <path d="M0 46 H100 M32 0 V100 M60 0 V100 M88 0 V100" stroke="#e6e9e4" stroke-width="0.35"/>
-          </svg>
-          <div id="map-pins"></div>
+        <div class="map-wrap" id="customer-map-wrap" style="height:560px;">
+          <div id="customer-map" style="position:absolute; inset:0;"></div>
           <div class="map-legend">
             <div class="row"><span class="sw" style="background:var(--on)"></span>Online</div>
             <div class="row"><span class="sw" style="background:var(--off)"></span>Offline</div>
@@ -2165,6 +2162,21 @@
         <input type="text" id="cu-username" placeholder="mis. budi.santoso">
         <div class="audit-mini" style="margin-top:4px;">Kalau username ini sudah ada sebagai PPP Secret di MikroTik, cukup isi persis sama — sistem akan menautkannya (bukan membuat ulang) begitu siklus live agent berjalan.</div>
       </div>
+      <div class="field" style="display:flex; gap:10px;">
+        <div style="flex:1;">
+          <label>Latitude — opsional</label>
+          <input type="number" step="any" id="cu-lat" placeholder="mis. -6.914744" oninput="onCustomerLatLngTyped()">
+        </div>
+        <div style="flex:1;">
+          <label>Longitude — opsional</label>
+          <input type="number" step="any" id="cu-lng" placeholder="mis. 107.609810" oninput="onCustomerLatLngTyped()">
+        </div>
+      </div>
+      <div class="field">
+        <label>Atau tempel koordinat dari Google Maps — opsional</label>
+        <input type="text" id="cu-latlng-paste" placeholder="tempel di sini, mis. -6.914744, 107.609810" oninput="onCustomerLatLngPaste()">
+      </div>
+      <div class="audit-mini" id="cu-position-hint">📍 Belum ada posisi</div>
     </div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeCustomerModal()">Batal</button>
@@ -2671,6 +2683,7 @@
     // Di layar mobile, sidebar dibuka sebagai overlay off-canvas — tutup otomatis setelah memilih halaman
     if(window.innerWidth <= 900) closeSidebar();
     if(name==='topology') renderTopologyMapIfActive();
+    if(name==='map') renderPinsIfActive();
   }
 
   // ---------- RENDER ----------
@@ -2753,25 +2766,131 @@
     });
   }
 
-  function renderPins(){
-    const el = document.getElementById('map-pins'); el.innerHTML='';
-    customers.filter(inSite).forEach((c)=>{
-      if(c.lat==null || c.lng==null) return;
-      const pin = document.createElement('div');
-      pin.className='pin'; pin.dataset.status=c.status;
-      pin.style.left = c.lng+'%'; pin.style.top = c.lat+'%'; // simpan lat/lng sbg persen posisi di peta abstrak
-      pin.style.background = statusColor(c.status);
-      pin.title = c.name+' — '+siteName(c.site_id);
-      pin.onclick = ()=>openDrawer(c.id);
-      el.appendChild(pin);
+  // =========================================================================
+  // PETA PELANGGAN (MapLibre) — sebelumnya grid SVG abstrak dengan lat/lng
+  // dipakai sebagai persen posisi (BUKAN koordinat asli), makanya selalu
+  // tampak kosong (tidak ada pelanggan yang punya lat/lng beneran, field-nya
+  // bahkan belum ada di modal Tambah/Edit Pelanggan sampai perbaikan ini).
+  // Sekarang pakai engine MapLibre yang sama dengan Topologi Jaringan —
+  // satu engine peta untuk seluruh app, konsisten.
+  // =========================================================================
+  let customerMapInstance = null;
+  let customerMarkers = {}; // customer_id -> maplibregl.Marker
+  let customerMapFilter = 'all';
+  let placingNewCustomer = false;
+
+  function statusMapColor(status){
+    if(status==='Aktif') return getCssVar('--on') || '#16a34a';
+    if(status==='Isolir') return getCssVar('--iso') || '#d97706';
+    return getCssVar('--off') || '#dc2626';
+  }
+  function getCssVar(name){
+    try { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); } catch(e){ return ''; }
+  }
+
+  function initCustomerMap(){
+    const mapEl = document.getElementById('customer-map');
+    if(!mapEl || customerMapInstance || typeof maplibregl==='undefined') return;
+
+    customerMapInstance = new maplibregl.Map({
+      container: 'customer-map',
+      center: [107.6, -6.9], zoom: 12,
+      style: {
+        version: 8,
+        sources: {
+          streets: { type:'raster', tiles: ['https://a.tile.openstreetmap.org/{z}/{x}/{y}.png','https://b.tile.openstreetmap.org/{z}/{x}/{y}.png','https://c.tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize:256, attribution:'&copy; OpenStreetMap contributors' },
+          satellite: { type:'raster', tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'], tileSize:256, attribution:'&copy; Esri (bisa gagal tanpa API key)' },
+        },
+        layers: [
+          { id:'streets-layer', type:'raster', source:'streets', layout:{ visibility:'visible' } },
+          { id:'satellite-layer', type:'raster', source:'satellite', layout:{ visibility:'none' } },
+        ],
+      },
+    });
+    customerMapInstance.addControl(new maplibregl.NavigationControl(), 'top-right');
+    customerMapInstance.on('load', ()=> renderPins());
+
+    const layerToggle = document.createElement('div');
+    layerToggle.className = 'topo-map-layer-toggle';
+    layerToggle.innerHTML = `<button type="button" data-layer="streets" class="on">Peta Jalan</button><button type="button" data-layer="satellite">Satelit</button>`;
+    layerToggle.querySelectorAll('button').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const key = btn.dataset.layer;
+        customerMapInstance.setLayoutProperty('satellite-layer','visibility', key==='satellite' ? 'visible' : 'none');
+        customerMapInstance.setLayoutProperty('streets-layer','visibility', key==='streets' ? 'visible' : 'none');
+        layerToggle.querySelectorAll('button').forEach(b=>b.classList.remove('on'));
+        btn.classList.add('on');
+      });
+    });
+    mapEl.appendChild(layerToggle);
+
+    const searchBox = document.createElement('div');
+    searchBox.className = 'topology-search-box';
+    searchBox.innerHTML = `<input type="text" id="customer-map-search" placeholder="Cari alamat…">`;
+    mapEl.appendChild(searchBox);
+    document.addEventListener('keydown', (e)=>{
+      if(e.target && e.target.id==='customer-map-search' && e.key==='Enter'){
+        geocodeAndFlyGeneric(e.target.value, customerMapInstance);
+      }
+    });
+
+    customerMapInstance.on('click', (e)=>{
+      if(placingNewCustomer){
+        placingNewCustomer = false;
+        document.getElementById('customer-map-mode-hint').textContent = '';
+        openCustomerModal(null, { lat: e.lngLat.lat, lng: e.lngLat.lng });
+      }
     });
   }
 
+  function renderPinsIfActive(){
+    const pageEl = document.getElementById('page-map');
+    if(pageEl && pageEl.classList.contains('active')){
+      if(!customerMapInstance) initCustomerMap();
+      else renderPins();
+    }
+  }
+
+  function startPlaceNewCustomer(){
+    placingNewCustomer = true;
+    document.getElementById('customer-map-mode-hint').textContent = 'Klik lokasi di peta…';
+  }
+
+  function renderPins(){
+    if(!customerMapInstance || !customerMapInstance.loaded()) return;
+    Object.values(customerMarkers).forEach(m=>m.remove());
+    customerMarkers = {};
+
+    const bounds = [];
+    customers.filter(inSite).forEach(c=>{
+      if(c.lat==null || c.lng==null) return;
+      const el = document.createElement('div');
+      el.style.cssText = `width:16px; height:16px; border-radius:50%; background:${statusMapColor(c.status)}; border:2.5px solid #fff; box-shadow:0 1px 4px rgba(0,0,0,.35); cursor:pointer;`;
+      el.style.display = (customerMapFilter==='all' || c.status===customerMapFilter) ? '' : 'none';
+      el.title = c.name + ' — ' + siteName(c.site_id);
+      el.addEventListener('click', (ev)=>{ ev.stopPropagation(); openDrawer(c.id); });
+
+      const marker = new maplibregl.Marker({ element: el, anchor:'center' })
+        .setLngLat([Number(c.lng), Number(c.lat)])
+        .addTo(customerMapInstance);
+      customerMarkers[c.id] = marker;
+      if(el.style.display !== 'none') bounds.push([Number(c.lng), Number(c.lat)]);
+    });
+
+    if(bounds.length){
+      const b = bounds.reduce((acc, p)=>acc.extend(p), new maplibregl.LngLatBounds(bounds[0], bounds[0]));
+      customerMapInstance.fitBounds(b, { padding:60, maxZoom:16 });
+    }
+  }
+
   function filterMap(status, btn){
+    customerMapFilter = status;
     document.querySelectorAll('.map-toolbar .chip').forEach(c=>c.classList.remove('on'));
     btn.classList.add('on');
-    document.querySelectorAll('.pin').forEach(p=>{
-      p.classList.toggle('hidden-pin', status!=='all' && p.dataset.status!==status);
+    Object.entries(customerMarkers).forEach(([id, marker])=>{
+      const c = customers.find(x=>x.id===id);
+      const show = status==='all' || (c && c.status===status);
+      marker.getElement().style.display = show ? '' : 'none';
     });
   }
 
@@ -2865,7 +2984,7 @@
   }
   // ---------- CUSTOMER: Tambah & Hapus Pelanggan ----------
   let editingCustomerId = null;
-  function openCustomerModal(customerId){
+  function openCustomerModal(customerId, presetLatLng){
     editingCustomerId = customerId || null;
     const c = editingCustomerId ? customers.find(x=>x.id===editingCustomerId) : null;
 
@@ -2881,6 +3000,14 @@
     document.getElementById('cu-access').value = c ? c.access_type : 'LAN_HUB';
     document.getElementById('cu-package').value = c ? (c.package||'') : '';
     document.getElementById('cu-username').value = c ? (c.pppoe_username||'') : '';
+
+    const lat = c ? c.lat : (presetLatLng ? presetLatLng.lat : null);
+    const lng = c ? c.lng : (presetLatLng ? presetLatLng.lng : null);
+    document.getElementById('cu-lat').value = lat!=null ? lat : '';
+    document.getElementById('cu-lng').value = lng!=null ? lng : '';
+    document.getElementById('cu-latlng-paste').value = '';
+    onCustomerLatLngTyped();
+
     document.getElementById('customer-modal-overlay').classList.add('open');
   }
   function closeCustomerModal(){
@@ -2895,6 +3022,8 @@
     const accessType = document.getElementById('cu-access').value;
     const pkg = document.getElementById('cu-package').value.trim();
     const username = document.getElementById('cu-username').value.trim();
+    const latRaw = document.getElementById('cu-lat').value;
+    const lngRaw = document.getElementById('cu-lng').value;
 
     if(!siteId){ showToast('Pilih server terlebih dahulu'); return; }
     if(!name || !code){ showToast('Nama dan ID Pelanggan wajib diisi'); return; }
@@ -2905,7 +3034,9 @@
       const payload = {
         site_id: siteId, customer_code: code, name,
         address: address || null, access_type: accessType,
-        package: pkg || null, pppoe_username: username || null
+        package: pkg || null, pppoe_username: username || null,
+        lat: latRaw!=='' ? parseFloat(latRaw) : null,
+        lng: lngRaw!=='' ? parseFloat(lngRaw) : null,
       };
       let error, savedRows;
       if(editingCustomerId){
@@ -2929,6 +3060,7 @@
       const { data, error: reErr } = await sb.from('customers').select('*').order('name');
       if(!reErr) customers = data || [];
       renderCustomerTable(document.getElementById('global-search').value);
+      renderPins();
       const wasEditing = !!editingCustomerId;
       closeCustomerModal();
       if(wasEditing && document.getElementById('drawer').classList.contains('open')) openDrawer(editingCustomerId || currentCustomerId);
@@ -4017,10 +4149,16 @@
     const mapEl = document.getElementById('topology-map');
     if(!mapEl || topologyMapInstance) return;
 
-    // Style raster murni (tanpa vector/API key) — 2 sumber ubin sekaligus
-    // dimuat (satelit Esri + jalan OSM), lalu ditukar lewat visibility layer
-    // (bukan setStyle) supaya source/layer perangkat & jalur tidak ikut hilang
-    // saat ganti tampilan. Ganti MAPBOX_TOKEN kalau ingin citra lebih tajam.
+    // 🐛 ROOT CAUSE peta blank (dicek 19 Jul 2026): endpoint Esri legacy
+    // (server.arcgisonline.com/.../World_Imagery & .../World_Boundaries_and_Places)
+    // sudah DIBATASI Esri sejak 2023 — akses tanpa API key sering kena 403,
+    // makanya satelit (yang sebelumnya jadi layer DEFAULT) gagal total dan
+    // peta tampak kosong. Sekarang default-nya OSM (gratis, tanpa key, terbukti
+    // jalan) — satelit Esri dijadikan opsi sekunder saja (bisa jadi tetap gagal
+    // tergantung region/waktu, itu di luar kendali kita). Layer "Label" yang
+    // pakai endpoint Esri yang sama DIHAPUS (redundan — OSM sudah ada label).
+    // Untuk citra satelit yang andal, isi MAPBOX_TOKEN di bawah (gratis daftar
+    // di mapbox.com, ada kuota gratis bulanan).
     const MAPBOX_TOKEN = ''; // isi token publik Mapbox di sini kalau punya, mis. 'pk.eyJ1Ijoi...'
     const satelliteTiles = MAPBOX_TOKEN
       ? [`https://api.mapbox.com/styles/v1/mapbox/satellite-streets-v12/tiles/{z}/{x}/{y}?access_token=${MAPBOX_TOKEN}`]
@@ -4033,14 +4171,12 @@
       style: {
         version: 8,
         sources: {
-          satellite: { type:'raster', tiles: satelliteTiles, tileSize:256, attribution: MAPBOX_TOKEN ? '&copy; Mapbox' : '&copy; Esri' },
-          streets:   { type:'raster', tiles: ['https://a.tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize:256, attribution: '&copy; OpenStreetMap contributors' },
-          labels:    { type:'raster', tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}'], tileSize:256 },
+          satellite: { type:'raster', tiles: satelliteTiles, tileSize:256, attribution: MAPBOX_TOKEN ? '&copy; Mapbox' : '&copy; Esri (bisa gagal tanpa API key)' },
+          streets:   { type:'raster', tiles: ['https://a.tile.openstreetmap.org/{z}/{x}/{y}.png','https://b.tile.openstreetmap.org/{z}/{x}/{y}.png','https://c.tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize:256, attribution: '&copy; OpenStreetMap contributors' },
         },
         layers: [
-          { id:'satellite-layer', type:'raster', source:'satellite', layout:{ visibility:'visible' } },
-          { id:'streets-layer',   type:'raster', source:'streets',   layout:{ visibility:'none' } },
-          { id:'labels-layer',    type:'raster', source:'labels',    layout:{ visibility:'visible' } },
+          { id:'streets-layer',   type:'raster', source:'streets',   layout:{ visibility:'visible' } },
+          { id:'satellite-layer', type:'raster', source:'satellite', layout:{ visibility:'none' } },
         ],
       },
     });
@@ -4073,29 +4209,23 @@
       renderTopologyMap();
     });
 
-    // Toggle Peta Jalan / Satelit + Label — tombol HTML biasa di pojok kanan
-    // atas peta (bukan IControl bawaan MapLibre, cukup DOM overlay saja).
+    // Toggle Peta Jalan / Satelit — tombol HTML biasa di pojok kanan atas
+    // peta (bukan IControl bawaan MapLibre, cukup DOM overlay saja). Default
+    // aktif: Peta Jalan (OSM, terbukti jalan tanpa key) — Satelit opsional,
+    // bisa gagal kalau Esri sedang membatasi akses anonim (lihat catatan di atas).
     const layerToggle = document.createElement('div');
     layerToggle.className = 'topo-map-layer-toggle';
     layerToggle.innerHTML = `
-      <button type="button" data-layer="satellite" class="on">Satelit</button>
-      <button type="button" data-layer="streets">Peta Jalan</button>
-      <button type="button" data-layer="labels" class="on">Label</button>
+      <button type="button" data-layer="streets" class="on">Peta Jalan</button>
+      <button type="button" data-layer="satellite">Satelit</button>
     `;
     layerToggle.querySelectorAll('button').forEach(btn=>{
       btn.addEventListener('click', ()=>{
         const key = btn.dataset.layer;
-        if(key==='labels'){
-          const vis = topologyMapInstance.getLayoutProperty('labels-layer','visibility');
-          const next = vis==='visible' ? 'none' : 'visible';
-          topologyMapInstance.setLayoutProperty('labels-layer','visibility', next);
-          btn.classList.toggle('on', next==='visible');
-        } else {
-          topologyMapInstance.setLayoutProperty('satellite-layer','visibility', key==='satellite' ? 'visible' : 'none');
-          topologyMapInstance.setLayoutProperty('streets-layer','visibility', key==='streets' ? 'visible' : 'none');
-          layerToggle.querySelectorAll('[data-layer="satellite"],[data-layer="streets"]').forEach(b=>b.classList.remove('on'));
-          btn.classList.add('on');
-        }
+        topologyMapInstance.setLayoutProperty('satellite-layer','visibility', key==='satellite' ? 'visible' : 'none');
+        topologyMapInstance.setLayoutProperty('streets-layer','visibility', key==='streets' ? 'visible' : 'none');
+        layerToggle.querySelectorAll('button').forEach(b=>b.classList.remove('on'));
+        btn.classList.add('on');
       });
     });
     mapEl.appendChild(layerToggle);
@@ -4131,18 +4261,21 @@
     });
   }
 
-  async function geocodeAndFly(query){
+  async function geocodeAndFlyGeneric(query, mapInstance){
     const q = (query||'').trim();
-    if(!q) return;
+    if(!q || !mapInstance) return;
     try {
       const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(q)}`);
       const results = await res.json();
       if(!results || !results.length){ showToast('Alamat tidak ditemukan'); return; }
       const { lat, lon } = results[0];
-      topologyMapInstance.flyTo({ center: [parseFloat(lon), parseFloat(lat)], zoom: 17 });
+      mapInstance.flyTo({ center: [parseFloat(lon), parseFloat(lat)], zoom: 17 });
     } catch(e){
       showToast('Gagal mencari alamat — coba lagi');
     }
+  }
+  async function geocodeAndFly(query){
+    return geocodeAndFlyGeneric(query, topologyMapInstance);
   }
 
   function nodeLatLng(n){
@@ -4571,6 +4704,24 @@
     document.getElementById('dm-lng').value = m[2];
     document.getElementById('dm-latlng-paste').value = '';
     onDeviceLatLngTyped();
+  }
+
+  function onCustomerLatLngTyped(){
+    const lat = document.getElementById('cu-lat').value;
+    const lng = document.getElementById('cu-lng').value;
+    const hint = document.getElementById('cu-position-hint');
+    hint.textContent = (lat!=='' && lng!=='')
+      ? `📍 ${Number(lat).toFixed(5)}, ${Number(lng).toFixed(5)}`
+      : '📍 Belum ada posisi';
+  }
+  function onCustomerLatLngPaste(){
+    const raw = document.getElementById('cu-latlng-paste').value.trim();
+    const m = raw.match(/(-?\d+(?:\.\d+)?)\s*[,\s]\s*(-?\d+(?:\.\d+)?)/);
+    if(!m) return;
+    document.getElementById('cu-lat').value = m[1];
+    document.getElementById('cu-lng').value = m[2];
+    document.getElementById('cu-latlng-paste').value = '';
+    onCustomerLatLngTyped();
   }
 
   function openDeviceModal(mode, refId, presetLatLng){
