@@ -2282,6 +2282,14 @@
 
   // ---------- STATE ----------
   let profile = null;          // {id, full_name, role, site_ids}
+  // Satu-satunya sumber peta di seluruh app — style MapTiler (vektor, sudah
+  // termasuk citra satelit hybrid). Menggantikan raster OSM+Esri lama total
+  // (bukan ditambal) karena Esri legacy tile dibatasi, dan supaya konsisten
+  // 1 style untuk Peta Pelanggan & Topologi Jaringan. Rencana MapTiler yang
+  // dipakai tidak menyediakan raster/WMTS — HANYA style.json vektor ini yang
+  // dipakai, jangan tambah source raster lain di sini.
+  const MAPTILER_STYLE_URL = 'https://api.maptiler.com/maps/019f78b4-55eb-7cd5-99be-a926ebd6c72a/style.json?key=xJ6jrhuEdeiKizZBwJ4l';
+
   let sites = [];
   let customers = [];
   let technicians = [];
@@ -2795,34 +2803,13 @@
     customerMapInstance = new maplibregl.Map({
       container: 'customer-map',
       center: [107.6, -6.9], zoom: 12,
-      style: {
-        version: 8,
-        sources: {
-          streets: { type:'raster', tiles: ['https://a.tile.openstreetmap.org/{z}/{x}/{y}.png','https://b.tile.openstreetmap.org/{z}/{x}/{y}.png','https://c.tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize:256, attribution:'&copy; OpenStreetMap contributors' },
-          satellite: { type:'raster', tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'], tileSize:256, attribution:'&copy; Esri (bisa gagal tanpa API key)' },
-        },
-        layers: [
-          { id:'streets-layer', type:'raster', source:'streets', layout:{ visibility:'visible' } },
-          { id:'satellite-layer', type:'raster', source:'satellite', layout:{ visibility:'none' } },
-        ],
-      },
+      style: MAPTILER_STYLE_URL,
     });
     customerMapInstance.addControl(new maplibregl.NavigationControl(), 'top-right');
     customerMapInstance.on('load', ()=> renderPins());
-
-    const layerToggle = document.createElement('div');
-    layerToggle.className = 'topo-map-layer-toggle';
-    layerToggle.innerHTML = `<button type="button" data-layer="streets" class="on">Peta Jalan</button><button type="button" data-layer="satellite">Satelit</button>`;
-    layerToggle.querySelectorAll('button').forEach(btn=>{
-      btn.addEventListener('click', ()=>{
-        const key = btn.dataset.layer;
-        customerMapInstance.setLayoutProperty('satellite-layer','visibility', key==='satellite' ? 'visible' : 'none');
-        customerMapInstance.setLayoutProperty('streets-layer','visibility', key==='streets' ? 'visible' : 'none');
-        layerToggle.querySelectorAll('button').forEach(b=>b.classList.remove('on'));
-        btn.classList.add('on');
-      });
+    customerMapInstance.on('error', (e)=>{
+      console.error('MapTiler gagal dimuat (Peta Pelanggan):', e && e.error ? e.error.message : e);
     });
-    mapEl.appendChild(layerToggle);
 
     const searchBox = document.createElement('div');
     searchBox.className = 'topology-search-box';
@@ -4149,38 +4136,16 @@
     const mapEl = document.getElementById('topology-map');
     if(!mapEl || topologyMapInstance) return;
 
-    // 🐛 ROOT CAUSE peta blank (dicek 19 Jul 2026): endpoint Esri legacy
-    // (server.arcgisonline.com/.../World_Imagery & .../World_Boundaries_and_Places)
-    // sudah DIBATASI Esri sejak 2023 — akses tanpa API key sering kena 403,
-    // makanya satelit (yang sebelumnya jadi layer DEFAULT) gagal total dan
-    // peta tampak kosong. Sekarang default-nya OSM (gratis, tanpa key, terbukti
-    // jalan) — satelit Esri dijadikan opsi sekunder saja (bisa jadi tetap gagal
-    // tergantung region/waktu, itu di luar kendali kita). Layer "Label" yang
-    // pakai endpoint Esri yang sama DIHAPUS (redundan — OSM sudah ada label).
-    // Untuk citra satelit yang andal, isi MAPBOX_TOKEN di bawah (gratis daftar
-    // di mapbox.com, ada kuota gratis bulanan).
-    const MAPBOX_TOKEN = ''; // isi token publik Mapbox di sini kalau punya, mis. 'pk.eyJ1Ijoi...'
-    const satelliteTiles = MAPBOX_TOKEN
-      ? [`https://api.mapbox.com/styles/v1/mapbox/satellite-streets-v12/tiles/{z}/{x}/{y}?access_token=${MAPBOX_TOKEN}`]
-      : ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'];
-
     topologyMapInstance = new maplibregl.Map({
       container: 'topology-map',
       center: [107.6, -6.9], // [lng, lat] — Indonesia, otomatis fit ke node begitu ada data
       zoom: 13,
-      style: {
-        version: 8,
-        sources: {
-          satellite: { type:'raster', tiles: satelliteTiles, tileSize:256, attribution: MAPBOX_TOKEN ? '&copy; Mapbox' : '&copy; Esri (bisa gagal tanpa API key)' },
-          streets:   { type:'raster', tiles: ['https://a.tile.openstreetmap.org/{z}/{x}/{y}.png','https://b.tile.openstreetmap.org/{z}/{x}/{y}.png','https://c.tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize:256, attribution: '&copy; OpenStreetMap contributors' },
-        },
-        layers: [
-          { id:'streets-layer',   type:'raster', source:'streets',   layout:{ visibility:'visible' } },
-          { id:'satellite-layer', type:'raster', source:'satellite', layout:{ visibility:'none' } },
-        ],
-      },
+      style: MAPTILER_STYLE_URL,
     });
     topologyMapInstance.addControl(new maplibregl.NavigationControl(), 'top-right');
+    topologyMapInstance.on('error', (e)=>{
+      console.error('MapTiler gagal dimuat (Topologi Jaringan):', e && e.error ? e.error.message : e);
+    });
 
     topologyMapInstance.on('load', ()=>{
       // Sumber kosong untuk jalur kabel — diisi setData() tiap renderTopologyMap()
@@ -4208,27 +4173,6 @@
 
       renderTopologyMap();
     });
-
-    // Toggle Peta Jalan / Satelit — tombol HTML biasa di pojok kanan atas
-    // peta (bukan IControl bawaan MapLibre, cukup DOM overlay saja). Default
-    // aktif: Peta Jalan (OSM, terbukti jalan tanpa key) — Satelit opsional,
-    // bisa gagal kalau Esri sedang membatasi akses anonim (lihat catatan di atas).
-    const layerToggle = document.createElement('div');
-    layerToggle.className = 'topo-map-layer-toggle';
-    layerToggle.innerHTML = `
-      <button type="button" data-layer="streets" class="on">Peta Jalan</button>
-      <button type="button" data-layer="satellite">Satelit</button>
-    `;
-    layerToggle.querySelectorAll('button').forEach(btn=>{
-      btn.addEventListener('click', ()=>{
-        const key = btn.dataset.layer;
-        topologyMapInstance.setLayoutProperty('satellite-layer','visibility', key==='satellite' ? 'visible' : 'none');
-        topologyMapInstance.setLayoutProperty('streets-layer','visibility', key==='streets' ? 'visible' : 'none');
-        layerToggle.querySelectorAll('button').forEach(b=>b.classList.remove('on'));
-        btn.classList.add('on');
-      });
-    });
-    mapEl.appendChild(layerToggle);
 
     // Kotak cari alamat (geocoding lewat Nominatim/OpenStreetMap, gratis tanpa API key)
     const searchBox = document.createElement('div');
