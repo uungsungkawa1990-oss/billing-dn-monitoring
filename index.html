@@ -5,7 +5,24 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>NexusNOC — ISP Billing & Monitoring</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js"></script>
+<script>
+  // =========================================================
+  // NEXUSNOC — Konfigurasi koneksi Supabase (inline, bukan file terpisah)
+  // =========================================================
+  // Sengaja DIGABUNG ke index.html (bukan config.js terpisah) supaya file
+  // ini SELALU bisa dites lokal (file://, content://, double-click) tanpa
+  // bergantung pada file lain yang kadang gagal termuat di luar server HTTP
+  // sungguhan — itu yang sebelumnya bikin window.NEXUSNOC_CONFIG kosong dan
+  // login gagal dengan error "Cannot access 'sb' before initialization".
+  //
+  // anon key AMAN ada di sini / di-commit ke GitHub — memang didesain dipakai
+  // di browser. Keamanan data dijaga RLS di schema.sql, bukan kerahasiaan
+  // anon key ini. JANGAN PERNAH taruh "service_role key" di file ini.
+  window.NEXUSNOC_CONFIG = {
+    supabaseUrl: "https://hrxprochykrbzbvuauyy.supabase.co",
+    supabaseAnonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhyeHByb2NoeWtyYnpidnVhdXl5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQyMzIyNDEsImV4cCI6MjA5OTgwODI0MX0.I4I_G_YG1ZrmIZ-lNnEgVPQTKkfpxiE17cvhryR97UU"
+  };
+</script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
 
@@ -279,10 +296,55 @@
   .addr-suggest-item{ padding:8px 12px; font-size:12.5px; cursor:pointer; border-bottom:1px solid var(--line); }
   .addr-suggest-item:last-child{ border-bottom:none; }
   .addr-suggest-item:hover, .addr-suggest-item.active{ background:var(--surface-2, #f1f5f9); }
+  .map-fit-btn{
+    position:absolute; bottom:90px; right:10px; z-index:5; width:38px; height:38px; border-radius:50%;
+    background:var(--surface); border:1px solid var(--line-2); box-shadow:var(--shadow-1);
+    display:flex; align-items:center; justify-content:center; cursor:pointer; color:var(--ink-2);
+  }
+  .map-fit-btn:active{ transform:scale(.94); }
+  .map-locate-btn{
+    position:absolute; bottom:138px; right:10px; z-index:5; width:38px; height:38px; border-radius:50%;
+    background:var(--surface); border:1px solid var(--line-2); box-shadow:var(--shadow-1);
+    display:flex; align-items:center; justify-content:center; cursor:pointer; color:var(--wire-blue);
+  }
+  .map-locate-btn:active{ transform:scale(.94); }
+  .map-locate-btn.loading{ opacity:.55; pointer-events:none; }
+  .map-labels-toggle-btn{
+    position:absolute; bottom:186px; right:10px; z-index:5; width:38px; height:38px; border-radius:50%;
+    background:var(--surface); border:1px solid var(--line-2); box-shadow:var(--shadow-1);
+    display:flex; align-items:center; justify-content:center; cursor:pointer; color:var(--ink-2);
+  }
+  .map-labels-toggle-btn.on{ background:var(--wire-blue); color:#fff; border-color:var(--wire-blue); }
+  .map-labels-toggle-btn:active{ transform:scale(.94); }
+  #topology-map.topo-labels-hidden .topo-map-label{ display:none; }
+  .my-location-dot{ width:18px; height:18px; border-radius:50%; background:#2563eb; border:3px solid #fff; box-shadow:0 0 0 4px rgba(37,99,235,.3), 0 1px 4px rgba(0,0,0,.4); }
+  @keyframes my-location-pulse{ 0%{ box-shadow:0 0 0 0 rgba(37,99,235,.5);} 100%{ box-shadow:0 0 0 14px rgba(37,99,235,0);} }
+  .my-location-dot::after{ content:''; position:absolute; inset:-3px; border-radius:50%; animation:my-location-pulse 1.6s ease-out infinite; }
+  .topo-device-tooltip{ background:var(--surface); border:1px solid var(--line-2); border-radius:8px; box-shadow:var(--shadow-1); font-size:11.5px; min-width:170px; overflow:hidden; }
+  .topo-device-tooltip .tdt-head{ padding:6px 10px; font-weight:600; background:var(--surface-2,#f1f5f9); border-bottom:1px solid var(--line-2); }
+  .topo-device-tooltip .tdt-row{ display:flex; justify-content:space-between; gap:10px; padding:3px 10px; }
+  .topo-device-tooltip .tdt-row:first-of-type{ padding-top:6px; }
+  .topo-device-tooltip .tdt-row:last-child{ padding-bottom:6px; }
+  .topo-device-tooltip .tdt-row span:first-child{ color:var(--ink-3); }
   .topology-marker{ background:transparent; border:none; }
   #topology-map{ position:relative; }
+  .bulk-locate-panel{
+    position:absolute; right:10px; bottom:10px; z-index:8; width:230px; max-height:70%;
+    background:#fff; border-radius:10px; box-shadow:0 4px 18px rgba(0,0,0,.25);
+    display:flex; flex-direction:column; overflow:hidden; font-size:12px;
+  }
+  .bulk-locate-panel .blp-head{ display:flex; justify-content:space-between; align-items:center; padding:9px 10px; border-bottom:1px solid var(--line); }
+  .bulk-locate-panel .blp-head button{ border:none; background:none; cursor:pointer; font-size:14px; color:var(--ink-3); }
+  .bulk-locate-panel .blp-count{ padding:6px 10px; color:var(--ink-3); border-bottom:1px solid var(--line); }
+  .bulk-locate-panel .blp-current{ padding:8px 10px; background:var(--wire-blue-soft); border-bottom:1px solid var(--line); }
+  .bulk-locate-panel .blp-actions{ padding:6px 10px; display:flex; gap:6px; border-bottom:1px solid var(--line); }
+  .bulk-locate-panel .blp-actions .btn{ padding:5px 8px; font-size:11px; width:auto; }
+  .bulk-locate-panel .blp-hint{ padding:6px 10px; color:var(--wire-blue); font-weight:600; border-bottom:1px solid var(--line); }
+  .bulk-locate-panel .blp-list{ overflow-y:auto; flex:1; }
+  .bulk-locate-panel .blp-item{ padding:7px 10px; border-bottom:1px solid var(--line); cursor:pointer; }
+  .bulk-locate-panel .blp-item:hover{ background:var(--surface-2); }
+  .bulk-locate-panel .blp-item.active{ background:var(--wire-blue); color:#fff; font-weight:600; }
   .topology-search-box{ position:absolute; top:10px; left:10px; z-index:5; }
-  .topo-livebox{ position:absolute; top:52px; left:10px; z-index:5; }
   .topo-map-layer-toggle{
     position:absolute; top:10px; right:10px; z-index:5; display:flex; gap:4px;
     background:rgba(255,255,255,.92); padding:4px; border-radius:8px; box-shadow:var(--shadow-1);
@@ -305,17 +367,18 @@
     box-shadow:none !important;
   }
   .topo-map-label::before{ display:none !important; }
+  /* Sama seperti .topo-map-label di atas — label nama pelanggan di Peta
+     Pelanggan, plus toggle sembunyikan sama seperti Topologi Jaringan. */
+  .customer-map-label{
+    background:rgba(20,23,28,.82) !important; border:none !important; color:#fff !important;
+    font-size:10.5px !important; font-weight:600; padding:2px 7px !important; border-radius:5px !important;
+    box-shadow:none !important;
+  }
+  .customer-map-label::before{ display:none !important; }
+  #customer-map.customer-labels-hidden .customer-map-label{ display:none; }
   .topo-link-popup{ font-size:12px; min-width:150px; }
   .topo-link-popup .tlp-title{ font-weight:700; margin-bottom:4px; }
   .topo-link-popup .tlp-row{ display:flex; justify-content:space-between; gap:10px; color:var(--ink-3); font-size:11px; padding:2px 0; }
-  .topo-livebox{
-    background:rgba(20,23,28,.86); color:#fff; border-radius:8px; padding:9px 12px; font-family:var(--mono);
-    font-size:11px; line-height:1.6; box-shadow:0 2px 10px rgba(0,0,0,.3); min-width:120px;
-  }
-  .topo-livebox b{ display:inline-block; width:38px; }
-  .topo-livebox .tlb-ok{ color:#4ade80; }
-  .topo-livebox .tlb-warn{ color:#fbbf24; }
-  .topo-livebox .tlb-bad{ color:#f87171; }
 
   /* ============ TABLE ============ */
   .table-wrap{ background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-m); overflow:hidden; box-shadow:var(--shadow-1); }
@@ -392,6 +455,48 @@
   .drawer-actions .btn{ flex:1 1 calc(50% - 4px); min-width:120px; }
   .audit-mini{ font-size:11px; color:var(--ink-3); font-family:var(--mono); }
 
+  /* ============ PORT GRID (pilih port + tandai rusak, hijau/biru/merah) ============ */
+  .port-grid{ display:flex; flex-wrap:wrap; gap:6px; padding:8px; background:var(--bg-2,#f8f8f7); border:1px solid var(--line); border-radius:10px; min-height:20px; }
+  .port-tile{
+    font-family:var(--mono); font-size:11.5px; font-weight:600; padding:6px 10px;
+    border-radius:7px; border:1.5px solid transparent; cursor:pointer; color:#fff;
+    line-height:1.3; transition:transform .08s ease;
+    display:flex; flex-direction:column; align-items:center; gap:1px; min-width:56px;
+  }
+  .port-tile:active{ transform:scale(.94); }
+  .port-tile:disabled{ cursor:not-allowed; opacity:.85; }
+  .port-tile-empty{ background:#16a34a; }           /* hijau — kosong */
+  .port-tile-used{ background:#2563eb; }            /* biru — terpakai */
+  .port-tile-broken{ background:#dc2626; }          /* merah — rusak */
+  .port-tile-selected{ border-color:#111; box-shadow:0 0 0 2px rgba(0,0,0,.15) inset; }
+  /* Nama pemakai port (pelanggan/perangkat) — DITULIS LANGSUNG di kotak
+     port, bukan cuma di title/hover (tidak muncul di HP). Baris kedua,
+     lebih kecil, sedikit transparan supaya nama port tetap jadi fokus utama. */
+  .port-tile-name{ font-size:11.5px; }
+  .port-tile-sub{
+    font-size:9px; font-weight:500; opacity:.92; max-width:74px; overflow:hidden;
+    text-overflow:ellipsis; white-space:nowrap; font-family:var(--font,sans-serif);
+  }
+  .port-grid-legend{ display:flex; flex-wrap:wrap; gap:12px; margin-top:6px; font-size:11px; color:var(--ink-3); }
+  /* "Buka keterangan" murni pakai <details>/<summary> bawaan browser —
+     tertutup by default, tidak ada paragraf panjang yang selalu tampil.
+     Tap "summary" untuk buka/tutup. */
+  .port-help{ margin-top:6px; }
+  .port-help summary{
+    font-size:11.5px; color:var(--wire-blue); cursor:pointer; font-weight:600; list-style:none;
+  }
+  .port-help summary::-webkit-details-marker{ display:none; }
+  .port-help summary::before{ content:'▸ '; }
+  .port-help[open] summary::before{ content:'▾ '; }
+  .port-help-body{
+    margin-top:6px; padding:8px 10px; background:var(--bg-2,#f8f8f7); border:1px solid var(--line);
+    border-radius:8px; display:flex; flex-direction:column; gap:5px; font-size:11.5px; color:var(--ink-2);
+  }
+  .port-dot{ display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:4px; vertical-align:middle; }
+  .port-dot-empty{ background:#16a34a; }
+  .port-dot-used{ background:#2563eb; }
+  .port-dot-broken{ background:#dc2626; }
+
   /* ============ VOUCHER PAGE ============ */
   .voucher-form{ display:grid; grid-template-columns: 1fr 1fr 1fr auto; gap:12px; align-items:end; }
   .voucher-form .field{ margin:0; }
@@ -401,7 +506,7 @@
   }
 
   /* ============ TOAST ============ */
-  #toast-container{ position:fixed; bottom:20px; right:20px; display:flex; flex-direction:column; gap:8px; z-index:60; }
+  #toast-container{ position:fixed; bottom:20px; right:20px; display:flex; flex-direction:column; gap:8px; z-index:3000; }
   .toast{
     background:var(--ink); color:#fff; padding:11px 16px; border-radius:var(--radius-s); font-size:12.8px;
     box-shadow:var(--shadow-2); display:flex; align-items:center; gap:9px; animation: toastin .22s ease;
@@ -430,12 +535,24 @@
   .topo-node-box:hover rect{ stroke:var(--wire-blue); }
   .topo-node-box.type-olt rect, .topo-node-box.type-splitter rect{ fill:var(--wire-orange-soft); }
   .topo-node-box.type-router rect, .topo-node-box.type-hub rect{ fill:var(--wire-blue-soft); }
+  .topo-node-box.topo-node-aggregate rect{ fill:var(--surface-2); stroke:var(--wire-blue); stroke-width:1.4; }
+  .topo-node-box.topo-node-aggregate:hover rect{ stroke:var(--wire-blue); stroke-width:2; }
+  .topo-node-box.topo-node-aggregate text.topo-title{ fill:var(--wire-blue); }
   .topo-node-box text.topo-title{ font-family:var(--body); font-size:11px; font-weight:600; fill:var(--ink); }
   .topo-node-box text.topo-sub{ font-family:var(--mono); font-size:9.5px; fill:var(--ink-3); }
   .topo-link{ stroke:var(--line-2); stroke-width:3; fill:none; }
   .topo-link-active{ stroke:var(--wire-blue); stroke-width:3.5; fill:none; stroke-dasharray:7,5; animation: topo-flow 1s linear infinite; }
   @keyframes topo-flow{ to{ stroke-dashoffset:-18; } }
   .topo-map-link-active{ stroke-dasharray:6,6 !important; animation: topo-flow 1s linear infinite; }
+  .topo-breadcrumb{ font-size:11.5px; color:var(--ink-3); margin-bottom:10px; display:flex; flex-wrap:wrap; align-items:center; gap:2px; }
+  .topo-crumb{ cursor:pointer; color:var(--wire-blue); }
+  .topo-crumb:hover{ text-decoration:underline; }
+  .topo-crumb.current{ color:var(--ink); font-weight:600; cursor:default; }
+  .topo-crumb-sep{ margin:0 5px; color:var(--ink-3); }
+  .topo-child-row{ display:flex; justify-content:space-between; align-items:flex-start; gap:10px; padding:8px 10px; border:1px solid var(--line-2); border-radius:8px; margin-bottom:6px; cursor:pointer; font-size:12.5px; }
+  .topo-child-row:hover{ background:var(--surface-2); border-color:var(--wire-blue); }
+  .topo-traffic-row{ display:flex; justify-content:space-between; font-size:12px; padding:4px 0; border-bottom:1px dashed var(--line-2); }
+  .topo-traffic-row:last-child{ border-bottom:none; }
   .topo-node-box.health-ok rect{ stroke:var(--on); stroke-width:1.8; }
   .topo-node-box.health-warn rect{ stroke:var(--iso); stroke-width:2; }
   .topo-node-box.health-bad rect{ stroke:var(--off); stroke-width:2; }
@@ -768,10 +885,11 @@
       <div class="page" id="page-map">
         <div class="page-head">
           <h2>Peta Pelanggan</h2>
-          <p>Klik titik untuk melihat detail pelanggan, kredensial PPPoE, dan status koneksi.</p>
         </div>
         <div class="map-toolbar">
           <button class="btn btn-primary" style="width:auto; padding:8px 14px;" onclick="startPlaceNewCustomer()">+ Tambah Pelanggan di Peta</button>
+          <button class="btn btn-ghost" style="width:auto; padding:8px 14px;" onclick="startBulkLocateCustomers()">📍 Atur Lokasi Massal</button>
+          <button class="chip" id="edit-customer-toggle-btn" onclick="toggleEditCustomerMapMode()">📍 Edit Pelanggan</button>
           <button class="chip on" data-filter="all" onclick="filterMap('all', this)">Semua</button>
           <button class="chip" data-filter="Aktif" onclick="filterMap('Aktif', this)"><span class="sw" style="background:var(--on)"></span>Online</button>
           <button class="chip" data-filter="Offline" onclick="filterMap('Offline', this)"><span class="sw" style="background:var(--off)"></span>Offline</button>
@@ -876,7 +994,6 @@
       <div class="page" id="page-topology">
         <div class="page-head">
           <h2>Topologi Jaringan</h2>
-          <p>Peta struktur jaringan per server dengan status kesehatan live dari koneksi pelanggan — untuk mengubah perangkat, gunakan halaman Manajemen Perangkat.</p>
         </div>
 
         <div class="kpi-row">
@@ -909,6 +1026,10 @@
           </div>
           <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
             <div style="display:flex; gap:6px;">
+              <button class="chip on" id="topo-simple-btn" onclick="toggleTopologySimpleMode(true, this)">Sederhana</button>
+              <button class="chip" id="topo-detail-btn" onclick="toggleTopologySimpleMode(false, this)">Detail</button>
+            </div>
+            <div style="display:flex; gap:6px;">
               <button class="chip on" data-nt-view="diagram" onclick="switchTopologyView('diagram', this)">Diagram Kesehatan</button>
               <button class="chip" data-nt-view="map" onclick="switchTopologyView('map', this)">Peta Perangkat (Hybrid)</button>
             </div>
@@ -916,17 +1037,27 @@
         </div>
 
         <div id="topology-diagram-view">
-          <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:10px;">
+          <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:6px;">
             <span class="hint" style="display:flex; align-items:center; gap:6px;"><span class="sw" style="background:var(--on)"></span>Sehat</span>
             <span class="hint" style="display:flex; align-items:center; gap:6px;"><span class="sw" style="background:var(--iso)"></span>Sebagian Bermasalah</span>
             <span class="hint" style="display:flex; align-items:center; gap:6px;"><span class="sw" style="background:var(--off)"></span>Mayoritas Offline</span>
+          </div>
+          <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:10px;">
+            <span class="hint" style="color:var(--ink-3);">Warna jalur = beban trafik:</span>
+            <span class="hint" style="display:flex; align-items:center; gap:6px;"><span class="sw" style="background:#16a34a"></span>&lt;50 Mbps</span>
+            <span class="hint" style="display:flex; align-items:center; gap:6px;"><span class="sw" style="background:#2563eb"></span>~50 Mbps</span>
+            <span class="hint" style="display:flex; align-items:center; gap:6px;"><span class="sw" style="background:#dc2626"></span>≥90 Mbps (mendekati 100)</span>
           </div>
           <div class="topology-wrap" id="network-topology-diagram">
             <div class="empty-note">Memuat topologi…</div>
           </div>
           <div class="card" id="topo-inspector-panel" style="display:none; margin-top:14px;">
+            <div id="topo-inspector-breadcrumb" class="topo-breadcrumb"></div>
             <div class="card-head"><h3 id="topo-inspector-title">—</h3><span class="muted" id="topo-inspector-type">—</span></div>
             <div class="info-grid" id="topo-inspector-body"></div>
+            <div id="topo-inspector-top-usage"></div>
+            <div class="dblock" id="topo-inspector-customer" style="display:none; margin-top:12px;"></div>
+            <div class="dblock" id="topo-inspector-children" style="margin-top:12px;"></div>
             <div style="margin-top:12px;">
               <button class="btn btn-ghost" style="width:auto; padding:7px 14px; font-size:11.5px;" onclick="openDeviceModal('edit', topoInspectorNodeId)">Edit Perangkat Ini →</button>
             </div>
@@ -936,7 +1067,9 @@
         <div id="topology-map-view" style="display:none;">
           <div class="device-toolbar" style="margin-bottom:8px;">
             <button class="btn btn-primary" style="width:auto; padding:9px 16px;" onclick="startPlaceNewDevice()">+ Tambah Perangkat di Peta</button>
+            <button class="btn btn-ghost" style="width:auto; padding:9px 16px;" onclick="startBulkLocateDevices()">📍 Atur Lokasi Massal</button>
             <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
+              <button class="chip" id="edit-device-toggle-btn" onclick="toggleEditDeviceMode()">📍 Edit Perangkat</button>
               <button class="chip" id="edit-path-toggle-btn" onclick="toggleEditPathMode()">✏️ Edit Jalur Kabel</button>
               <span class="hint" id="map-mode-hint"></span>
             </div>
@@ -1646,6 +1779,10 @@
       </div>
     </div>
     <div class="dblock">
+      <label>Jalur Jaringan (dari MikroTik)</label>
+      <div id="d-network-path" class="topo-breadcrumb" style="margin-bottom:0;">—</div>
+    </div>
+    <div class="dblock">
       <label>Username PPPoE</label>
       <div class="cred-box"><span class="cred-val mono-cell" id="d-username">—</span></div>
     </div>
@@ -1705,8 +1842,6 @@
           <option value="odp_jointbox">ODP — Joint Box / Distribusi (Multi-Core)</option>
           <option value="customer_router">Router / Access Point (Pelanggan)</option>
         </select>
-        <div class="audit-mini" id="dm-lanports-hint" style="display:none; margin-top:4px;">Untuk perangkat multi-port (router/switch) yang dipakai beberapa pelanggan sekaligus — tentukan jumlah port di bawah, supaya tiap pelanggan/perangkat anak bisa dipasangkan ke nomor port yang jelas lewat "Dari Port Induk".</div>
-        <div class="audit-mini" id="dm-htb-hint" style="display:none; margin-top:4px;">HTB BOLEH berdiri sendiri sebagai titik akhir ke satu pelanggan — TIDAK wajib selalu berpasangan pemancar+penerima. Hubungkan langsung ke pelanggan lewat kolom "Pelanggan Terhubung" di bawah; tambahkan HTB kedua hanya kalau memang ada unit fisik relainya di lokasi lain.</div>
       </div>
       <div class="field">
         <label>Status Posisi</label>
@@ -1718,33 +1853,56 @@
       <div class="field" id="dm-ports-field" style="display:none; gap:10px; display:flex;">
         <div style="flex:1;">
           <label>Jml Port A</label>
-          <input type="number" id="dm-ports-a" min="0" value="0">
+          <input type="number" id="dm-ports-a" min="0" value="0" oninput="populateOwnUplinkPortSelect(); populateOwnPortStatusGrid();">
         </div>
         <div style="flex:1;">
           <label>Jml Port B</label>
-          <input type="number" id="dm-ports-b" min="0" value="0">
+          <input type="number" id="dm-ports-b" min="0" value="0" oninput="populateOwnPortStatusGrid();">
         </div>
       </div>
       <div class="field" id="dm-lanports-field" style="display:none;">
         <label>Jumlah Port</label>
-        <input type="number" id="dm-lanports" min="0" list="dm-lanports-presets" placeholder="mis. 6, 12, 24">
+        <input type="number" id="dm-lanports" min="0" list="dm-lanports-presets" placeholder="mis. 6, 12, 24" oninput="populateOwnUplinkPortSelect(); populateOwnPortStatusGrid();">
         <datalist id="dm-lanports-presets">
           <option value="4"><option value="6"><option value="8"><option value="12">
           <option value="16"><option value="24"><option value="48">
         </datalist>
-        <div class="audit-mini" style="margin-top:4px;">Berapa banyak port fisik di perangkat ini (mis. hub/switch 6, 12, atau 24 port) — dipakai untuk daftar pilihan "Dari Port Induk" saat menghubungkan beberapa pelanggan/perangkat anak ke port yang berbeda-beda di perangkat ini.</div>
+      </div>
+      <div class="field" id="dm-broken-ports-field" style="display:none;">
+        <label>Tandai Port Rusak di Perangkat Ini — opsional</label>
+        <div id="dm-broken-ports-grid" class="port-grid"></div>
+        <!-- 🐛 PERBAIKAN (diminta pengguna): sebelumnya ada paragraf
+             penjelasan panjang yang SELALU tampil di sini ("Klik port
+             yang rusak secara fisik…"). Sekarang diganti jadi "buka
+             keterangan" murni (tertutup by default, tinggal tap kalau
+             mau baca) — dan nama pemakai port sekarang sudah kelihatan
+             langsung di kotak portnya, jadi penjelasan panjang di depan
+             mata sudah tidak perlu lagi. -->
+        <details class="port-help">
+          <summary>Apa artinya warna ini?</summary>
+          <div class="port-help-body">
+            <div><span class="port-dot port-dot-empty"></span> Hijau = port kosong, masih bisa dipakai.</div>
+            <div><span class="port-dot port-dot-used"></span> Biru = sudah dipakai — nama pemakainya kelihatan di kotak portnya.</div>
+            <div><span class="port-dot port-dot-broken"></span> Merah = port rusak (kabel/port mati). Tap sebuah port untuk tandai rusak/tidak.</div>
+          </div>
+        </details>
       </div>
       <div class="field">
         <label>Induk (Parent) — opsional</label>
-        <select id="dm-parent" onchange="populateParentPortSelect()">
+        <select id="dm-parent" onchange="populateParentPortSelect(); populateOwnUplinkPortSelect();">
           <option value="">— Tidak ada (perangkat akar) —</option>
         </select>
       </div>
       <div class="field">
-        <label>Dari Port Induk (Output) — opsional</label>
-        <input type="text" id="dm-parent-port" list="dm-parent-port-options" placeholder="mis. LAN 4, FO A-2">
-        <datalist id="dm-parent-port-options"></datalist>
-        <div class="audit-mini" id="dm-port-conflict-hint" style="margin-top:4px;">Satu port di perangkat induk yang sama hanya boleh dipakai satu perangkat anak — akan ditolak otomatis kalau bentrok.</div>
+        <label>Kabel dari Induk Keluar dari Port Berapa — opsional</label>
+        <input type="hidden" id="dm-parent-port" value="">
+        <div id="dm-parent-port-grid" class="port-grid"><div class="audit-mini">— Pilih induk dulu —</div></div>
+        <div class="audit-mini" id="dm-port-conflict-hint" style="margin-top:4px;"></div>
+      </div>
+      <div class="field" id="dm-uplink-port-field" style="display:none;">
+        <label>Kabel Itu Masuk ke Port Berapa di Perangkat Ini — opsional</label>
+        <input type="hidden" id="dm-uplink-port" value="">
+        <div id="dm-uplink-port-grid" class="port-grid"></div>
       </div>
       <div class="field">
         <label>Alamat IP — opsional</label>
@@ -1752,15 +1910,21 @@
       </div>
       <div class="field">
         <label>Pelanggan Terhubung — opsional</label>
+        <!-- Cuma untuk kasus: perangkat ini SATU jalur khusus ke SATU
+             pelanggan (mis. HTB kecil yang memang cuma melayani 1 rumah).
+             Kalau 1 perangkat ini portnya dipakai banyak pelanggan
+             berbeda-beda (mis. HUB 12 port ke 12 rumah), pakai "Router /
+             Access Point (Pelanggan)" di Jenis Perangkat untuk TIAP
+             pelanggan, supaya masing-masing punya port sendiri yang
+             tercatat jelas siapa pakai port mana. -->
+        <div class="audit-mini" style="margin-bottom:6px;">Kalau perangkat ini SATU jalur khusus ke SATU pelanggan saja, pilih di sini. Kalau portnya dipakai banyak pelanggan berbeda-beda, buat "Router / Access Point (Pelanggan)" tersendiri untuk tiap pelanggan supaya kelihatan siapa pakai port yang mana.</div>
         <select id="dm-customer">
           <option value="">— Tidak ada / bukan titik pelanggan —</option>
         </select>
-        <div class="audit-mini" style="margin-top:4px;">Pakai ini kalau perangkat ini adalah titik akhir ke SATU pelanggan tertentu (mis. HTB atau router di rumah pelanggan) — tidak perlu bikin perangkat tambahan cuma untuk "mewakili" pelanggan. Untuk ODP yang dipakai banyak pelanggan sekaligus, biarkan kosong di sini.</div>
       </div>
       <div class="field">
         <label>Interface MikroTik — opsional, untuk trafik OTOMATIS</label>
         <select id="dm-mikrotik-interface" onchange="onDeviceMikrotikInterfaceChange()"></select>
-        <div class="audit-mini" style="margin-top:4px;">Isi HANYA kalau perangkat ini adalah router MikroTik itu sendiri. Daftar di bawah diambil LANGSUNG dari router (hanya port ether fisik) setelah server terhubung — kalau belum terkoneksi, tes koneksi dulu di halaman Pengaturan. Kalau dipilih, 2 kolom trafik di bawah akan otomatis diperbarui terus oleh agent tiap ±20 detik — TIDAK bisa diketik manual lagi selama field ini terisi. Untuk HTB/splitter pasif yang bukan MikroTik, biarkan kosong.</div>
       </div>
       <div class="field" style="display:flex; gap:10px;">
         <div style="flex:1;">
@@ -1772,7 +1936,6 @@
           <input type="number" step="any" min="0" id="dm-traffic-up" placeholder="mis. 4.6">
         </div>
       </div>
-      <div class="audit-mini" style="margin-top:-8px;">Untuk HTB/splitter/hub: kalau sudah ada pelanggan yang di-link ke node ini atau turunannya (field "Pelanggan Terhubung" di atas), trafik di diagram topologi OTOMATIS dari jumlah trafik pelanggan-pelanggan itu — 2 kolom manual di atas hanya jadi fallback selama belum ada pelanggan yang di-link.</div>
       <div class="field" style="display:flex; gap:10px;">
         <div style="flex:1;">
           <label>Latitude — opsional</label>
@@ -1786,7 +1949,6 @@
       <div class="field">
         <label>Atau tempel koordinat dari Google Maps — opsional</label>
         <input type="text" id="dm-latlng-paste" placeholder="tempel di sini, mis. -6.914744, 107.609810" oninput="onDeviceLatLngPaste()">
-        <div class="audit-mini" style="margin-top:4px;">Buka lokasi di Google Maps → tekan lama titiknya → salin koordinat yang muncul → tempel di sini. Tetap bisa isi manual di kolom Latitude/Longitude, atau geser pin di peta seperti biasa — tidak wajib pakai peta lagi.</div>
       </div>
       <div class="audit-mini" id="dm-position-hint">Posisi di peta belum ditentukan — akan ditempatkan di tengah peta, geser untuk mengatur lokasi sebenarnya.</div>
     </div>
@@ -2142,6 +2304,25 @@
 </div>
 
 <!-- CUSTOMER MODAL -->
+<!-- AGGREGATE LIST MODAL (ratusan perangkat diringkas -> cari & drill-down di sini) -->
+<div class="modal-overlay" id="agg-modal-overlay" onclick="if(event.target===this) closeAggregateModal()">
+  <div class="modal-box" style="max-width:520px;">
+    <div class="modal-head">
+      <h3 id="agg-modal-title">Daftar Perangkat</h3>
+      <button class="drawer-close" onclick="closeAggregateModal()">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <input type="text" id="agg-modal-search" placeholder="Cari nama perangkat / pelanggan / port…" oninput="renderAggregateModalList()" style="margin-bottom:10px;">
+      <div id="agg-modal-list" style="max-height:50vh; overflow-y:auto;"></div>
+      <div style="margin-top:12px; padding-top:12px; border-top:1px solid var(--line-2);">
+        <button class="btn btn-ghost" style="width:auto; padding:7px 14px; font-size:11.5px;" onclick="expandCurrentAggregateParent()">Tampilkan semua sebagai kotak individual di diagram →</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="customer-modal-overlay" onclick="if(event.target===this) closeCustomerModal()">
   <div class="modal-box">
     <div class="modal-head">
@@ -2285,21 +2466,32 @@
 <script>
   // =========================================================
   // NEXUSNOC — koneksi ke Supabase (data asli, bukan contoh)
-  // Isi URL & anon key di config.js — JANGAN taruh di file ini.
+  // Konfigurasi ada di blok <script> inline di <head> (window.NEXUSNOC_CONFIG).
   // =========================================================
-  const sb = (function(){
+  // Dipakai `let` + try/catch (bukan `const` + IIFE yang bisa throw) supaya
+  // kalau suatu saat inisialisasi gagal, error-nya jelas & sekali saja —
+  // BUKAN "Cannot access 'sb' before initialization" yang membingungkan
+  // (itu terjadi kalau const-IIFE gagal di tengah jalan, sb jadi permanen
+  // tidak terinisialisasi untuk sisa eksekusi script).
+  let sb = null;
+  try {
     if(!window.supabase || !window.supabase.createClient){
-      const hint = document.getElementById('login-hint');
-      if(hint) hint.textContent = 'Gagal memuat library Supabase (cdn.jsdelivr.net). Cek koneksi internet, atau coba refresh halaman.';
-      const btn = document.getElementById('login-btn');
-      if(btn) btn.disabled = true;
       throw new Error('window.supabase belum termuat — cek script CDN supabase-js di index.html');
     }
-    return window.supabase.createClient(
+    if(!window.NEXUSNOC_CONFIG || !window.NEXUSNOC_CONFIG.supabaseUrl || !window.NEXUSNOC_CONFIG.supabaseAnonKey){
+      throw new Error('window.NEXUSNOC_CONFIG kosong/tidak lengkap — cek blok config inline di <head>');
+    }
+    sb = window.supabase.createClient(
       window.NEXUSNOC_CONFIG.supabaseUrl,
       window.NEXUSNOC_CONFIG.supabaseAnonKey
     );
-  })();
+  } catch(e){
+    console.error('[NEXUSNOC] Gagal inisialisasi Supabase:', e);
+    const hint = document.getElementById('login-hint');
+    if(hint) hint.textContent = 'Gagal memuat konfigurasi/Supabase: ' + e.message;
+    const btn = document.getElementById('login-btn');
+    if(btn) btn.disabled = true;
+  }
 
   // ---------- STATE ----------
   let profile = null;          // {id, full_name, role, site_ids}
@@ -2313,6 +2505,28 @@
   // Key yang sama dipakai lagi untuk MapTiler Geocoding API (autocomplete alamat) —
   // tidak perlu API key terpisah, satu key MapTiler bisa untuk style peta & geocoding.
   const MAPTILER_KEY = new URL(MAPTILER_STYLE_URL).searchParams.get('key');
+
+  // Citra satelit Google (lyrs=y — hybrid, satelit + label jalan), diakses lewat
+  // endpoint tile internal Google Maps (BUKAN Google Maps Platform API resmi).
+  // Resolusinya jauh lebih tajam dari Esri (default MapTiler) untuk area
+  // pemukiman Indonesia. CATATAN RISIKO yang sudah disampaikan & disetujui:
+  // ini bukan cara resmi/didukung Google, bisa berhenti berfungsi kapan saja
+  // tanpa pemberitahuan kalau Google memblokir pola akses ini. Kalau suatu saat
+  // peta tiba-tiba blank/gagal muat, ini kemungkinan besar penyebabnya —
+  // solusinya kembali ke MAPTILER_STYLE_URL di atas, atau pindah ke Google Maps
+  // Platform resmi (butuh billing account).
+  const GOOGLE_SAT_STYLE = {
+    version: 8,
+    sources: {
+      'google-sat': {
+        type: 'raster',
+        tiles: ['https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}'],
+        tileSize: 256,
+        attribution: '© Google',
+      },
+    },
+    layers: [{ id: 'google-sat-layer', type: 'raster', source: 'google-sat', minzoom: 0, maxzoom: 22 }],
+  };
 
   let sites = [];
   let customers = [];
@@ -2714,6 +2928,19 @@
     document.getElementById('topbar-title').textContent = titles[name];
     // Di layar mobile, sidebar dibuka sebagai overlay off-canvas — tutup otomatis setelah memilih halaman
     if(window.innerWidth <= 900) closeSidebar();
+    // Kasus "inspector nyangkut kebuka terus": panel detail perangkat di
+    // Topologi Jaringan pakai variabel global topoInspectorNodeId supaya
+    // bisa di-refresh isinya waktu ada update data (lihat
+    // renderNetworkTopologyPage). Sebelumnya variabel ini TIDAK PERNAH
+    // direset saat pindah menu, jadi begitu balik lagi ke Topologi Jaringan
+    // — atau bahkan halaman lain ikut memicu render ulang — panel yang
+    // sama otomatis kebuka lagi. Reset di sini setiap pindah KELUAR dari
+    // halaman Topologi Jaringan.
+    if(name !== 'topology'){
+      topoInspectorNodeId = null;
+      const topoPanel = document.getElementById('topo-inspector-panel');
+      if(topoPanel) topoPanel.style.display = 'none';
+    }
     if(name==='topology') renderTopologyMapIfActive();
     if(name==='map') renderPinsIfActive();
   }
@@ -2807,8 +3034,14 @@
   // satu engine peta untuk seluruh app, konsisten.
   // =========================================================================
   let customerMapInstance = null;
+  let customerMapLastFitSite; // dipakai supaya fitBounds cuma jalan sekali tiap ganti server, bukan tiap render (biar peta tidak "reset sendiri" waktu user lagi geser-geser)
   let customerMarkers = {}; // customer_id -> maplibregl.Marker
   let customerMapFilter = 'all';
+  // Sama seperti editDeviceMode/pendingDeviceMove di Topologi Jaringan —
+  // supaya pelanggan yang titiknya meleset bisa digeser langsung di peta,
+  // tidak perlu edit koordinat manual.
+  let editCustomerMapMode = false;
+  let pendingCustomerMove = null; // {customerId, lat, lng} — belum disimpan ke DB
   let placingNewCustomer = false;
 
   function statusMapColor(status){
@@ -2832,7 +3065,7 @@
       customerMapInstance = new maplibregl.Map({
         container: 'customer-map',
         center: [107.6, -6.9], zoom: 12,
-        style: MAPTILER_STYLE_URL,
+        style: GOOGLE_SAT_STYLE,
       });
     } catch(e){
       mapEl.innerHTML = `<div class="empty-note" style="color:var(--off); padding:16px;">Peta gagal diinisialisasi: ${e && e.message ? e.message : e}</div>`;
@@ -2858,15 +3091,122 @@
     searchBox.className = 'topology-search-box';
     searchBox.innerHTML = `<input type="text" id="customer-map-search" placeholder="Cari alamat…"><div class="addr-suggest-list" id="customer-map-search-list" style="display:none;"></div>`;
     mapEl.appendChild(searchBox);
-    attachAddressAutocomplete('customer-map-search', 'customer-map-search-list', customerMapInstance);
+    attachAddressAutocomplete('customer-map-search', 'customer-map-search-list', customerMapInstance, { searchCustomers: true });
+
+    // Tombol "Tampilkan Semua" — kalau peta digeser terlalu jauh sampai
+    // pelanggan hilang dari layar, tinggal tap ini untuk kembali melihat semua.
+    const fitBtn = document.createElement('div');
+    fitBtn.className = 'map-fit-btn';
+    fitBtn.title = 'Tampilkan semua pelanggan';
+    fitBtn.innerHTML = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>`;
+    fitBtn.onclick = () => fitCustomerMapToAll();
+    mapEl.appendChild(fitBtn);
+
+    const locateBtn = document.createElement('div');
+    locateBtn.className = 'map-locate-btn';
+    locateBtn.title = 'Lokasi saya';
+    locateBtn.innerHTML = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>`;
+    locateBtn.onclick = () => locateMe(customerMapInstance, 'customer', locateBtn);
+    mapEl.appendChild(locateBtn);
+
+    // Sama seperti di Topologi Jaringan — tombol sembunyikan/tampilkan nama
+    // pelanggan yang nempel permanen di bawah tiap titik, berguna kalau
+    // pelanggannya banyak dan peta jadi penuh sesak sama tulisan.
+    const labelsBtn = document.createElement('div');
+    labelsBtn.className = 'map-labels-toggle-btn';
+    labelsBtn.title = 'Sembunyikan/tampilkan nama pelanggan';
+    labelsBtn.innerHTML = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>`;
+    labelsBtn.onclick = () => {
+      const hidden = mapEl.classList.toggle('customer-labels-hidden');
+      labelsBtn.classList.toggle('on', hidden);
+    };
+    mapEl.appendChild(labelsBtn);
 
     customerMapInstance.on('click', (e)=>{
+      if(bulkLocateCustomerActive && bulkLocateCustomerCurrentId){
+        assignBulkLocateCustomerCoord(e.lngLat.lat, e.lngLat.lng);
+        return;
+      }
       if(placingNewCustomer){
         placingNewCustomer = false;
         document.getElementById('customer-map-mode-hint').textContent = '';
         openCustomerModal(null, { lat: e.lngLat.lat, lng: e.lngLat.lng });
       }
     });
+  }
+
+  // ---------------------------------------------------------------------
+  // ATUR LOKASI MASSAL (Pelanggan) — solusi untuk pelanggan/perangkat yang
+  // ~95% belum punya lat/lng tapi lokasinya sudah diketahui di kepala:
+  // pilih 1 dari daftar "belum ada titik", klik sekali di peta, otomatis
+  // tersimpan & lanjut ke pelanggan berikutnya — TANPA buka modal, TANPA
+  // pindah halaman, tetap di peta yang sama dari awal sampai selesai.
+  // ---------------------------------------------------------------------
+  let bulkLocateCustomerActive = false;
+  let bulkLocateCustomerQueue = [];
+  let bulkLocateCustomerCurrentId = null;
+
+  function startBulkLocateCustomers(){
+    bulkLocateCustomerQueue = customers.filter(inSite).filter(c=>c.lat==null || c.lng==null);
+    if(!bulkLocateCustomerQueue.length){ showToast('Semua pelanggan di server ini sudah punya titik lokasi'); return; }
+    bulkLocateCustomerActive = true;
+    placingNewCustomer = false;
+    advanceBulkLocateCustomer();
+  }
+  function stopBulkLocateCustomers(){
+    bulkLocateCustomerActive = false;
+    bulkLocateCustomerQueue = [];
+    bulkLocateCustomerCurrentId = null;
+    document.getElementById('customer-map-mode-hint').textContent = '';
+    renderBulkLocateCustomerPanel();
+  }
+  function advanceBulkLocateCustomer(){
+    if(!bulkLocateCustomerQueue.length){ bulkLocateCustomerCurrentId = null; renderBulkLocateCustomerPanel(); return; }
+    bulkLocateCustomerCurrentId = bulkLocateCustomerQueue[0].id;
+    renderBulkLocateCustomerPanel();
+    document.getElementById('customer-map-mode-hint').textContent = `Klik lokasi "${bulkLocateCustomerQueue[0].name}" di peta…`;
+  }
+  function selectBulkLocateCustomer(id){
+    bulkLocateCustomerCurrentId = id;
+    const c = bulkLocateCustomerQueue.find(x=>x.id===id);
+    renderBulkLocateCustomerPanel();
+    if(c) document.getElementById('customer-map-mode-hint').textContent = `Klik lokasi "${c.name}" di peta…`;
+  }
+  function skipBulkLocateCustomer(){
+    bulkLocateCustomerQueue = bulkLocateCustomerQueue.filter(c=>c.id!==bulkLocateCustomerCurrentId);
+    advanceBulkLocateCustomer();
+  }
+  async function assignBulkLocateCustomerCoord(lat, lng){
+    const id = bulkLocateCustomerCurrentId; if(!id) return;
+    const { error } = await sb.from('customers').update({ lat, lng }).eq('id', id);
+    if(error){ showToast('Gagal menyimpan lokasi: ' + error.message); return; }
+    const idx = customers.findIndex(c=>c.id===id);
+    if(idx>-1){ customers[idx].lat = lat; customers[idx].lng = lng; }
+    bulkLocateCustomerQueue = bulkLocateCustomerQueue.filter(c=>c.id!==id);
+    renderPins();
+    showToast('Lokasi tersimpan — lanjut ke berikutnya');
+    advanceBulkLocateCustomer();
+  }
+  function renderBulkLocateCustomerPanel(){
+    let panel = document.getElementById('bulk-locate-customer-panel');
+    if(!bulkLocateCustomerActive){ if(panel) panel.remove(); return; }
+    if(!panel){
+      panel = document.createElement('div');
+      panel.id = 'bulk-locate-customer-panel';
+      panel.className = 'bulk-locate-panel';
+      document.getElementById('customer-map-wrap').appendChild(panel);
+    }
+    const current = bulkLocateCustomerQueue.find(c=>c.id===bulkLocateCustomerCurrentId);
+    panel.innerHTML = `
+      <div class="blp-head"><strong>Atur Lokasi Massal</strong><button onclick="stopBulkLocateCustomers()">✕</button></div>
+      <div class="blp-count">${bulkLocateCustomerQueue.length} pelanggan belum ada titik</div>
+      ${current ? `
+        <div class="blp-current">Sekarang: <strong>${current.name}</strong><br><span class="muted">${current.address||'—'}</span></div>
+        <div class="blp-actions"><button class="btn btn-ghost" onclick="skipBulkLocateCustomer()">Lewati</button></div>
+        <div class="blp-hint">Klik lokasinya di peta →</div>
+      ` : `<div class="blp-hint">Semua sudah diberi titik 🎉</div>`}
+      <div class="blp-list">${bulkLocateCustomerQueue.map(c=>`<div class="blp-item ${c.id===bulkLocateCustomerCurrentId?'active':''}" onclick="selectBulkLocateCustomer('${c.id}')">${c.name}</div>`).join('')}</div>
+    `;
   }
 
   function renderPinsIfActive(){
@@ -2894,19 +3234,96 @@
       el.style.cssText = `width:16px; height:16px; border-radius:50%; background:${statusMapColor(c.status)}; border:2.5px solid #fff; box-shadow:0 1px 4px rgba(0,0,0,.35); cursor:pointer;`;
       el.style.display = (customerMapFilter==='all' || c.status===customerMapFilter) ? '' : 'none';
       el.title = c.name + ' — ' + siteName(c.site_id);
-      el.addEventListener('click', (ev)=>{ ev.stopPropagation(); openDrawer(c.id); });
+      el.addEventListener('click', (ev)=>{ ev.stopPropagation(); if(!editCustomerMapMode) openDrawer(c.id); });
 
-      const marker = new maplibregl.Marker({ element: el, anchor:'center' })
+      const marker = new maplibregl.Marker({ element: el, draggable: editCustomerMapMode, anchor:'center' })
         .setLngLat([Number(c.lng), Number(c.lat)])
         .addTo(customerMapInstance);
+
+      // Label nama pelanggan permanen (bukan cuma popup pas diklik) — sama
+      // seperti nama perangkat di Topologi Jaringan, plus toggle sembunyikan
+      // lewat tombol map-labels-toggle-btn (lihat initCustomerMap).
+      const labelMarker = new maplibregl.Marker({
+        element: (()=>{ const l=document.createElement('div'); l.className='customer-map-label'; l.textContent=c.name; return l; })(),
+        anchor:'top', offset:[0,10],
+      }).setLngLat([Number(c.lng), Number(c.lat)]).addTo(customerMapInstance);
+
+      marker.on('dragend', ()=>{
+        if(pendingCustomerMove && pendingCustomerMove.customerId !== c.id){
+          showToast('Simpan atau batalkan perubahan posisi sebelumnya dulu — satu pelanggan dalam satu waktu.');
+          renderPins(); // balikkan marker ini ke posisi asli
+          return;
+        }
+        const { lng, lat } = marker.getLngLat();
+        labelMarker.setLngLat([lng, lat]); // label ikut posisi baru sementara, biar tidak "kececer"
+        pendingCustomerMove = { customerId: c.id, lat, lng };
+        document.getElementById('customer-map-mode-hint').innerHTML =
+          `Posisi baru untuk "${c.name}" belum disimpan — ` +
+          `<button class="btn btn-primary" style="width:auto; padding:4px 10px; font-size:11.5px;" onclick="saveCustomerMove()">Simpan</button> ` +
+          `<button class="btn btn-ghost" style="width:auto; padding:4px 10px; font-size:11.5px;" onclick="cancelCustomerMove()">Batal</button>`;
+      });
+
       customerMarkers[c.id] = marker;
+      customerMarkers[c.id+'__label'] = labelMarker;
       if(el.style.display !== 'none') bounds.push([Number(c.lng), Number(c.lat)]);
     });
 
-    if(bounds.length){
+    // PERBAIKAN: sebelumnya fitBounds() jalan SETIAP render (termasuk tiap ada
+    // update realtime dari tabel mana pun) — peta jadi terasa "reset sendiri"
+    // tiap kali ada perubahan data, walau user sedang lihat area lain. Sekarang
+    // hanya di-fit ulang otomatis saat PERTAMA kali halaman dibuka atau saat
+    // server aktif diganti — selebihnya posisi kamera terakhir user dipertahankan.
+    // Tombol "Tampilkan Semua" (map-fit-btn) tetap bisa dipakai kapan saja.
+    if(bounds.length && customerMapLastFitSite !== currentSite){
       const b = bounds.reduce((acc, p)=>acc.extend(p), new maplibregl.LngLatBounds(bounds[0], bounds[0]));
       customerMapInstance.fitBounds(b, { padding:60, maxZoom:16 });
+      customerMapLastFitSite = currentSite;
     }
+  }
+
+  function toggleEditCustomerMapMode(){
+    editCustomerMapMode = !editCustomerMapMode;
+    const btn = document.getElementById('edit-customer-toggle-btn');
+    const hint = document.getElementById('customer-map-mode-hint');
+    cancelCustomerMove();
+    if(editCustomerMapMode){
+      btn.classList.add('on');
+      hint.textContent = 'Geser titik pelanggan, lalu tekan Simpan';
+    } else {
+      btn.classList.remove('on');
+      hint.textContent = '';
+    }
+    renderPins();
+  }
+
+  function saveCustomerMove(){
+    if(!pendingCustomerMove) return;
+    const { customerId, lat, lng } = pendingCustomerMove;
+    sb.from('customers').update({ lat, lng }).eq('id', customerId).then(({ error })=>{
+      if(error){ showToast('Gagal menyimpan posisi: ' + error.message); return; }
+      const idx = customers.findIndex(x=>x.id===customerId);
+      if(idx>-1){ customers[idx].lat = lat; customers[idx].lng = lng; }
+      pendingCustomerMove = null;
+      document.getElementById('customer-map-mode-hint').textContent = editCustomerMapMode ? 'Geser titik pelanggan, lalu tekan Simpan' : '';
+      showToast('Posisi pelanggan disimpan');
+      renderPins();
+    });
+  }
+  function cancelCustomerMove(){
+    if(!pendingCustomerMove) return;
+    pendingCustomerMove = null;
+    if(editCustomerMapMode) document.getElementById('customer-map-mode-hint').textContent = 'Geser titik pelanggan, lalu tekan Simpan';
+    renderPins(); // marker kembali ke posisi asli (belum ditulis ke DB)
+  }
+
+  function fitCustomerMapToAll(){
+    if(!customerMapInstance) return;
+    const pts = customers.filter(inSite).filter(c=>c.lat!=null && c.lng!=null)
+      .filter(c=>customerMapFilter==='all' || c.status===customerMapFilter)
+      .map(c=>[Number(c.lng), Number(c.lat)]);
+    if(!pts.length) return;
+    const b = pts.reduce((acc,p)=>acc.extend(p), new maplibregl.LngLatBounds(pts[0], pts[0]));
+    customerMapInstance.fitBounds(b, { padding:60, maxZoom:16 });
   }
 
   function filterMap(status, btn){
@@ -3529,7 +3946,26 @@
     document.getElementById('d-site').textContent = siteName(c.site_id);
     document.getElementById('d-package').textContent = c.package || '—';
     document.getElementById('d-access').textContent = c.access_type==='OLT_GPON' ? 'OLT / GPON' : 'LAN / Hub';
-    document.getElementById('d-node').textContent = c.node_id || '—';
+
+    // Titik distribusi: tampilkan NAMA perangkat (bukan UUID mentah), dan
+    // susun jalur lengkap dari MikroTik (root) turun sampai ke titik ini —
+    // supaya langsung kelihatan pelanggan ini lewat jalur/port mana saja.
+    const distNode = c.node_id ? networkNodes.find(n=>n.id===c.node_id) : null;
+    document.getElementById('d-node').textContent = distNode ? deviceLabel(distNode) : (c.node_id ? '(perangkat tidak ditemukan)' : '— belum terhubung ke perangkat');
+
+    const pathEl = document.getElementById('d-network-path');
+    if(distNode){
+      const path = buildNodePathToRoot(distNode.id);
+      pathEl.innerHTML = path.map((p,i)=>{
+        const isLast = i===path.length-1;
+        const portTag = p.parent_port ? ` <span class="mono-cell muted" style="font-size:10.5px;">(${p.parent_port})</span>` : '';
+        return `<span class="topo-crumb${isLast?' current':''}" onclick="goPage('topology'); closeDrawer(); setTimeout(()=>{ const diagBtn=document.querySelector('#page-topology [data-nt-view=\\'diagram\\']'); if(diagBtn) switchTopologyView('diagram', diagBtn); showTopoInspector('${p.id}'); }, 50);">${deviceLabel(p)}${portTag}</span>`
+             + (isLast ? '' : '<span class="topo-crumb-sep">›</span>');
+      }).join('');
+    } else {
+      pathEl.innerHTML = '<span class="muted">Pelanggan ini belum ditautkan ke perangkat manapun di Manajemen Perangkat — jalur jaringan tidak bisa ditelusuri.</span>';
+    }
+
     document.getElementById('d-username').textContent = c.pppoe_username || '—';
     document.getElementById('d-password').textContent = '••••••••';
     document.getElementById('d-password').classList.add('masked');
@@ -3714,7 +4150,189 @@
     return '—';
   }
 
+  // =========================================================================
+  // SKALA RATUSAN PERANGKAT: kalau 1 perangkat (mis. HUB) punya banyak anak
+  // "ujung" (Router/AP Pelanggan) sekaligus — realistis sampai puluhan/ratusan
+  // di satu HUB/ODP — menggambar semuanya sebagai kotak sejajar akan membuat
+  // diagram tak terbaca (baris sepanjang ratusan kotak). Solusinya: kalau
+  // jumlah anak "ujung" dari satu induk melebihi ambang batas, diagram HANYA
+  // menggambar SATU kotak ringkasan ("42 Pelanggan (Router/AP)") — daftar
+  // lengkapnya baru muncul lewat pencarian/tabel saat kotak itu diklik, bukan
+  // digambar satu-satu di diagram. Perangkat infrastruktur (HTB/HUB/OLT/dst,
+  // yang jumlahnya biasanya cuma puluhan, bukan ratusan) tetap digambar apa
+  // adanya karena strukturnya sendiri yang penting dilihat.
+  // =========================================================================
+  const LEAF_GROUP_THRESHOLD = 6;   // di atas ini, anak "ujung" diringkas jadi 1 kotak
+  const LEAF_NODE_TYPES = ['customer_router']; // tipe yang TIDAK PERNAH bercabang lagi
+  let expandedAggregateParents = new Set(); // parent_id yang sengaja dipaksa tampil satu-satu
+
+  // Bikin daftar node KHUSUS UNTUK DIGAMBAR (siteNodes ASLI tidak diubah sama
+  // sekali — semua perhitungan trafik/kesehatan tetap jalan dari data asli).
+  function buildDisplayNodes(siteNodes){
+    const byParent = {};
+    siteNodes.forEach(n=>{ if(n.parent_id) (byParent[n.parent_id] = byParent[n.parent_id]||[]).push(n); });
+
+    const skipIds = new Set();
+    const aggregates = []; // { id, parentId, leafNodes }
+
+    Object.keys(byParent).forEach(parentId=>{
+      if(expandedAggregateParents.has(parentId)) return; // admin minta lihat satu-satu untuk induk ini
+      const kids = byParent[parentId];
+      const leafKids = kids.filter(k => LEAF_NODE_TYPES.includes(k.type));
+      if(leafKids.length > LEAF_GROUP_THRESHOLD){
+        leafKids.forEach(k=>skipIds.add(k.id));
+        aggregates.push({ id: '__agg__'+parentId, parentId, leafNodes: leafKids });
+      }
+    });
+
+    const displayNodes = siteNodes.filter(n=>!skipIds.has(n.id));
+    aggregates.forEach(agg=>{
+      displayNodes.push({
+        id: agg.id, site_id: siteNodes[0] ? siteNodes[0].site_id : null,
+        parent_id: agg.parentId, type: '__aggregate__',
+        name: `${agg.leafNodes.length} Pelanggan (Router/AP)`,
+        _leafNodes: agg.leafNodes
+      });
+    });
+    return displayNodes;
+  }
+
+  // Ringkasan kesehatan + trafik gabungan untuk satu kotak agregat, dihitung
+  // dari node ASLI di dalamnya (bukan dari node semu itu sendiri).
+  function aggregateSummary(aggNode, siteNodes){
+    let total=0, online=0, offline=0, isolir=0, down=0, up=0;
+    aggNode._leafNodes.forEach(ln=>{
+      const h = nodeHealth(ln.id);
+      total+=h.total; online+=h.online; offline+=h.offline; isolir+=h.isolir;
+      const t = getNodeTrafficRollup(ln, siteNodes);
+      if(t){ down += t.down||0; up += t.up||0; }
+    });
+    return { total, online, offline, isolir, down, up };
+  }
+
+  function expandAggregateParent(parentId){
+    expandedAggregateParents.add(parentId);
+    renderNetworkTopologyDiagram();
+  }
+  function collapseAggregateParent(parentId){
+    expandedAggregateParents.delete(parentId);
+    renderNetworkTopologyDiagram();
+  }
+
+  // ---------- Modal daftar & cari untuk kotak agregat (ratusan perangkat) ----------
+  let currentAggregateNode = null;
+  function openAggregateModal(aggNode){
+    currentAggregateNode = aggNode;
+    document.getElementById('agg-modal-title').textContent = `${aggNode._leafNodes.length} Perangkat Diringkas`;
+    document.getElementById('agg-modal-search').value = '';
+    renderAggregateModalList();
+    document.getElementById('agg-modal-overlay').classList.add('open');
+  }
+  function closeAggregateModal(){
+    document.getElementById('agg-modal-overlay').classList.remove('open');
+    currentAggregateNode = null;
+  }
+  function renderAggregateModalList(){
+    if(!currentAggregateNode) return;
+    const q = (document.getElementById('agg-modal-search').value || '').toLowerCase().trim();
+    const listEl = document.getElementById('agg-modal-list');
+    const rows = currentAggregateNode._leafNodes
+      .map(ln=>{
+        const linkedCustomer = customers.find(c=>c.node_id===ln.id);
+        const h = nodeHealth(ln.id);
+        return { ln, linkedCustomer, h };
+      })
+      .filter(r=>{
+        if(!q) return true;
+        const hay = `${deviceLabel(r.ln)} ${r.ln.parent_port||''} ${r.linkedCustomer ? r.linkedCustomer.name+' '+r.linkedCustomer.customer_code : ''}`.toLowerCase();
+        return hay.includes(q);
+      })
+      .sort((a,b)=>deviceLabel(a.ln).localeCompare(deviceLabel(b.ln)));
+
+    if(!rows.length){
+      listEl.innerHTML = '<div class="empty-note">Tidak ada yang cocok.</div>';
+      return;
+    }
+    listEl.innerHTML = rows.map(r=>{
+      const statusColor = r.h.cls==='bad' ? 'var(--off)' : r.h.cls==='warn' ? 'var(--iso)' : r.h.total>0 ? 'var(--on)' : 'var(--ink-3)';
+      return `<div class="topo-child-row" onclick="closeAggregateModal(); goPage('topology'); setTimeout(()=>showTopoInspector('${r.ln.id}'), 50);">
+        <div>
+          <strong>${deviceLabel(r.ln)}</strong>${r.ln.parent_port ? ` <span class="mono-cell muted">· Port: ${r.ln.parent_port}</span>` : ''}
+          ${r.linkedCustomer ? `<div class="muted" style="font-size:11px;">Pelanggan: ${r.linkedCustomer.name} (${r.linkedCustomer.customer_code})</div>` : '<div class="muted" style="font-size:11px;">Belum ditautkan ke pelanggan</div>'}
+        </div>
+        <div style="text-align:right;"><span class="sw" style="background:${statusColor}; display:inline-block; width:8px; height:8px; border-radius:50%;"></span></div>
+      </div>`;
+    }).join('');
+  }
+  function expandCurrentAggregateParent(){
+    if(!currentAggregateNode) return;
+    expandAggregateParent(currentAggregateNode.parent_id);
+    closeAggregateModal();
+    showToast(`Menampilkan semua ${currentAggregateNode._leafNodes.length} perangkat sebagai kotak individual — mungkin perlu geser banyak untuk melihat semua.`);
+  }
+
   // Susun node per-site jadi level (BFS multi-root) supaya bisa digambar sebagai diagram SVG.
+  // =========================================================================
+  // MODE SEDERHANA — lipat rantai perangkat pass-through murni jadi 1 garis.
+  //
+  // "Penting" (tetap tampil apa adanya) kalau salah satu benar:
+  //   - root (tidak ada induk, atau induknya di luar site ini)
+  //   - ada pelanggan nempel langsung (customers.node_id)
+  //   - jumlah anak BUKAN persis 1 (0 anak = ujung jalur, 2+ anak = percabangan)
+  // Selain itu ("pass-through": 1 induk → dia sendiri → 1 anak, tanpa pelanggan,
+  // tanpa percabangan) DISEMBUNYIKAN dari gambar, digantikan garis yang
+  // menyambung langsung ke leluhur penting berikutnya.
+  //
+  // PENTING: ini transformasi TAMPILAN saja, dikerjakan di atas SALINAN data
+  // (bukan networkNodes asli) — nodeHealth()/getNodeTrafficRollup() tetap
+  // menghitung dari hierarki SEBENARNYA (lewat index global), jadi angka yang
+  // ditampilkan tetap akurat walau garisnya dilipat.
+  // =========================================================================
+  // Versi ringan untuk Peta Perangkat (MapLibre): cuma butuh TAHU id mana yang
+  // "penting" untuk menentukan marker mana yang ditampilkan — jalur kabel fisik
+  // TETAP digambar apa adanya (akurat secara geografis, berguna untuk teknisi
+  // di lapangan), yang disederhanakan cuma ikon+labelnya supaya tidak numpuk.
+  function computeMeaningfulNodeIds(nodesList){
+    const childCount = new Map();
+    nodesList.forEach(n => childCount.set(n.id, 0));
+    nodesList.forEach(n => { if(n.parent_id && childCount.has(n.parent_id)) childCount.set(n.parent_id, childCount.get(n.parent_id)+1); });
+    const hasCustomer = new Set(customers.filter(c=>c.node_id).map(c=>c.node_id));
+    const meaningful = new Set();
+    nodesList.forEach(n=>{
+      const isRoot = !n.parent_id || !nodesList.some(x=>x.id===n.parent_id);
+      if(isRoot || hasCustomer.has(n.id) || (childCount.get(n.id)||0) !== 1) meaningful.add(n.id);
+    });
+    return meaningful;
+  }
+
+  function buildSimplifiedNodeList(siteNodesFull){
+    const childCount = new Map();
+    siteNodesFull.forEach(n => childCount.set(n.id, 0));
+    siteNodesFull.forEach(n => { if(n.parent_id && childCount.has(n.parent_id)) childCount.set(n.parent_id, childCount.get(n.parent_id)+1); });
+    const hasCustomer = new Set(customers.filter(c=>c.node_id).map(c=>c.node_id));
+
+    function isMeaningful(n){
+      if(!n.parent_id || !siteNodesFull.some(x=>x.id===n.parent_id)) return true; // root/anak yatim
+      if(hasCustomer.has(n.id)) return true;
+      return (childCount.get(n.id)||0) !== 1; // 0 = ujung, 2+ = percabangan → penting
+    }
+
+    const meaningfulIds = new Set(siteNodesFull.filter(isMeaningful).map(n=>n.id));
+
+    return siteNodesFull.filter(n=>meaningfulIds.has(n.id)).map(n=>{
+      if(!n.parent_id || meaningfulIds.has(n.parent_id)) return { ...n, _skippedNames: [] };
+      // Telusuri ke atas lewat rantai pass-through sampai ketemu leluhur "penting"
+      const skippedNames = [];
+      let cur = siteNodesFull.find(x=>x.id===n.parent_id);
+      while(cur && !meaningfulIds.has(cur.id)){
+        skippedNames.push(deviceLabel(cur));
+        cur = cur.parent_id ? siteNodesFull.find(x=>x.id===cur.parent_id) : null;
+      }
+      return { ...n, parent_id: cur ? cur.id : null, _skippedNames: skippedNames };
+    });
+  }
+
+
   function computeTopoLevels(nodesInSite){
     const roots = nodesInSite.filter(n => !n.parent_id || !nodesInSite.some(x=>x.id===n.parent_id));
     const levels = [];
@@ -3741,10 +4359,107 @@
   // tidak punya interface sendiri untuk dibaca. Trafik per-pelanggan sendiri
   // (customers.traffic_down_mbps/up_mbps) disinkron live oleh mikrotik-agent.mjs
   // dari interface PPPoE masing-masing pelanggan di router (mis. <pppoe-budi>).
+  // ---------------------------------------------------------------------------
+  // INDEX CACHE — dibangun sekali per perubahan data (bukan per node/per render),
+  // dipakai nodeHealth()/collectDescendantCustomers() supaya TIDAK melakukan
+  // customers.filter()/networkNodes.filter() penuh berulang-ulang untuk SETIAP
+  // node saat render tree/topologi/peta. Krusial untuk skala ribuan perangkat —
+  // tanpa ini kompleksitasnya O(N node × M pelanggan), gampang membekukan
+  // browser begitu data membesar. Invalidasi otomatis: index dibangun ulang
+  // kalau referensi array `customers`/`networkNodes`/`connectionLogs` berubah
+  // (array baru dibuat tiap fetch/realtime update) — jadi tidak perlu diingat
+  // manual di tiap tempat yang mengubah data.
+  // ---------------------------------------------------------------------------
+  let _custIndexRef = null, _custByNodeIdIdx = new Map();
+  function ensureCustomerIndex(){
+    if(_custIndexRef === customers) return;
+    _custByNodeIdIdx = new Map();
+    customers.forEach(c=>{
+      if(!c.node_id) return;
+      if(!_custByNodeIdIdx.has(c.node_id)) _custByNodeIdIdx.set(c.node_id, []);
+      _custByNodeIdIdx.get(c.node_id).push(c);
+    });
+    _custIndexRef = customers;
+  }
+
+  let _logsIndexRef = null, _logsByCustIdIdx = new Map();
+  function ensureConnectionLogsIndex(){
+    if(_logsIndexRef === connectionLogs) return;
+    _logsByCustIdIdx = new Map();
+    connectionLogs.forEach(l=>{
+      if(l.signal_dbm==null) return;
+      if(!_logsByCustIdIdx.has(l.customer_id)) _logsByCustIdIdx.set(l.customer_id, []);
+      _logsByCustIdIdx.get(l.customer_id).push(Number(l.signal_dbm));
+    });
+    _logsIndexRef = connectionLogs;
+  }
+
+  let _childrenIndexRef = null, _childrenByParentIdIdx = new Map();
+  function ensureNodeChildrenIndex(){
+    if(_childrenIndexRef === networkNodes) return;
+    _childrenByParentIdIdx = new Map();
+    networkNodes.forEach(n=>{
+      if(!n.parent_id) return;
+      if(!_childrenByParentIdIdx.has(n.parent_id)) _childrenByParentIdIdx.set(n.parent_id, []);
+      _childrenByParentIdIdx.get(n.parent_id).push(n);
+    });
+    _childrenIndexRef = networkNodes;
+  }
+
   function collectDescendantCustomers(nodeId, siteNodes){
-    const direct = customers.filter(c => c.node_id === nodeId);
-    const childNodes = siteNodes.filter(ch => ch.parent_id === nodeId);
-    return childNodes.reduce((acc, ch) => acc.concat(collectDescendantCustomers(ch.id, siteNodes)), direct.slice());
+    ensureCustomerIndex();
+    ensureNodeChildrenIndex();
+    const result = [];
+    const queue = [nodeId];
+    const visited = new Set();
+    while(queue.length){
+      const id = queue.shift();
+      if(visited.has(id)) continue;
+      visited.add(id);
+      const direct = _custByNodeIdIdx.get(id);
+      if(direct) result.push(...direct);
+      const children = _childrenByParentIdIdx.get(id);
+      if(children) children.forEach(ch=>{ if(!visited.has(ch.id)) queue.push(ch.id); });
+    }
+    return result;
+  }
+
+  // Jalur dari root (MikroTik paling atas) turun sampai ke node ini —
+  // dipakai untuk breadcrumb di panel inspeksi topologi & drawer pelanggan.
+  // Mengembalikan array node dari ROOT dulu -> ... -> node ini sendiri.
+  function buildNodePathToRoot(nodeId){
+    const path = [];
+    let current = networkNodes.find(n=>n.id===nodeId);
+    const guard = new Set(); // jaga-jaga kalau parent_id ada siklus (data rusak)
+    while(current && !guard.has(current.id)){
+      path.unshift(current);
+      guard.add(current.id);
+      current = current.parent_id ? networkNodes.find(n=>n.id===current.parent_id) : null;
+    }
+    return path;
+  }
+
+  // Cari node tempat pelanggan ini benar-benar tersambung (customers.node_id),
+  // lalu susun jalurnya dari MikroTik (root) turun ke situ.
+  function buildCustomerPath(customer){
+    if(!customer || !customer.node_id) return null;
+    const node = networkNodes.find(n=>n.id===customer.node_id);
+    if(!node) return null;
+    return buildNodePathToRoot(node.id);
+  }
+
+  // Item 8: warna jalur berdasarkan beban trafik gabungan (download+upload).
+  // Threshold sengaja dijadikan konstanta bernama di sini — gampang diubah
+  // kalau kapasitas link ISP Anda beda dari 100 Mbps standar (mis. link fiber
+  // 1 Gbps, tinggal ganti angkanya, tidak perlu ubah logic di tempat lain).
+  const TOPO_TRAFFIC_HIGH_MBPS = 90;  // "hampir 100" → merah
+  const TOPO_TRAFFIC_MID_MBPS  = 50;  // "sekitar 50" → biru
+  function trafficLinkColor(traf){
+    if(!traf) return '#94a3b8'; // abu-abu — tidak ada data trafik sama sekali
+    const total = (traf.down||0) + (traf.up||0);
+    if(total >= TOPO_TRAFFIC_HIGH_MBPS) return '#dc2626'; // merah
+    if(total >= TOPO_TRAFFIC_MID_MBPS) return '#2563eb';  // biru
+    return '#16a34a'; // hijau
   }
 
   function getNodeTrafficRollup(node, siteNodes){
@@ -3772,20 +4487,34 @@
   // Kesehatan node dihitung dari pelanggan yang terhubung LANGSUNG ke node itu (customers.node_id)
   // — bukan agregasi rekursif ke anak node.
   function nodeHealth(nodeId){
-    const custs = customers.filter(c=>c.node_id===nodeId);
+    ensureCustomerIndex();
+    ensureConnectionLogsIndex();
+    const custs = _custByNodeIdIdx.get(nodeId) || [];
     const total = custs.length;
-    const online = custs.filter(c=>c.status==='Aktif').length;
-    const offline = custs.filter(c=>c.status==='Offline').length;
-    const isolir = custs.filter(c=>c.status==='Isolir').length;
-    const idSet = new Set(custs.map(c=>c.id));
-    const signals = connectionLogs.filter(l=>idSet.has(l.customer_id) && l.signal_dbm!=null).map(l=>Number(l.signal_dbm));
-    const avgSignal = signals.length ? signals.reduce((a,b)=>a+b,0)/signals.length : null;
+    let online=0, offline=0, isolir=0;
+    let signalSum=0, signalCount=0;
+    custs.forEach(c=>{
+      if(c.status==='Aktif') online++;
+      else if(c.status==='Offline') offline++;
+      else if(c.status==='Isolir') isolir++;
+      const sigs = _logsByCustIdIdx.get(c.id);
+      if(sigs){ sigs.forEach(v=>{ signalSum+=v; signalCount++; }); }
+    });
+    const avgSignal = signalCount ? signalSum/signalCount : null;
     let cls = 'none';
     if(total>0){
       const badRatio = (offline+isolir)/total;
       cls = badRatio===0 ? 'ok' : badRatio < 0.5 ? 'warn' : 'bad';
     }
     return { total, online, offline, isolir, avgSignal, cls };
+  }
+
+  function toggleTopologySimpleMode(simple, btn){
+    topologySimpleMode = simple;
+    document.getElementById('topo-simple-btn').classList.toggle('on', simple);
+    document.getElementById('topo-detail-btn').classList.toggle('on', !simple);
+    renderNetworkTopologyDiagram();
+    renderTopologyMapIfActive();
   }
 
   function filterTopology(mode, btn){
@@ -3815,40 +4544,150 @@
   }
 
   let topoInspectorNodeId = null;
-  function showTopoInspector(nodeId){
+  function showTopoInspector(nodeId, scrollTo){
+    // scrollTo default true (klik user beneran) — SENGAJA dibuat false saat
+    // dipanggil dari renderNetworkTopologyPage() untuk sekadar me-refresh isi
+    // panel yang sudah terbuka (data berubah krn realtime/polling), supaya
+    // layar TIDAK ikut auto-scroll/geser sendiri tiap ada update data masuk.
+    if(scrollTo === undefined) scrollTo = true;
     topoInspectorNodeId = nodeId;
     const n = networkNodes.find(x=>x.id===nodeId);
     const panel = document.getElementById('topo-inspector-panel');
     if(!n){ panel.style.display='none'; return; }
 
+    const siteNodes = networkNodes.filter(x=>x.site_id===n.site_id);
     const parent = n.parent_id ? networkNodes.find(p=>p.id===n.parent_id) : null;
-    const children = networkNodes.filter(c=>c.parent_id===n.id);
+    const children = siteNodes.filter(c=>c.parent_id===n.id);
     const h = nodeHealth(n.id);
     const link = networkLinks.find(l=>l.node_id===n.id);
     const parentLL = parent ? nodeLatLng(parent) : null;
     const childLL = nodeLatLng(n);
     const points = (parentLL && childLL) ? [parentLL, ...(link&&link.waypoints||[]), childLL] : [];
-    const traf = getNodeTrafficRollup(n, networkNodes.filter(x=>x.site_id===n.site_id));
+    const traf = getNodeTrafficRollup(n, siteNodes);
+    const linkedCustomer = customers.find(c=>c.node_id===n.id);
+
+    // ---------- Breadcrumb: MikroTik (root) -> ... -> node ini ----------
+    const path = buildNodePathToRoot(n.id);
+    document.getElementById('topo-inspector-breadcrumb').innerHTML = path.map((p,i)=>{
+      const isLast = i===path.length-1;
+      return `<span class="topo-crumb${isLast?' current':''}" ${isLast?'':`onclick="showTopoInspector('${p.id}')"`}>${deviceLabel(p)}</span>`
+           + (isLast ? '' : '<span class="topo-crumb-sep">›</span>');
+    }).join('');
 
     document.getElementById('topo-inspector-title').textContent = deviceLabel(n);
     document.getElementById('topo-inspector-type').innerHTML = `<span class="badge ${h.cls==='bad'?'off':h.cls==='warn'?'iso':'on'}"><span class="sw" style="background:${h.cls==='bad'?'var(--off)':h.cls==='warn'?'var(--iso)':'var(--on)'}"></span>${deviceTypeLabel(n.type)}</span>`;
 
-    document.getElementById('topo-inspector-body').innerHTML = `
-      <div><div class="ig-label">Induk (Parent)</div>${parent ? deviceLabel(parent) : '— (root / server)'}</div>
+    // ---------- Info dasar ----------
+    const linkColorNow = trafficLinkColor(traf);
+    const trafficLevelLabel = !traf ? null : (linkColorNow==='#dc2626' ? 'Tinggi — mendekati kapasitas' : linkColorNow==='#2563eb' ? 'Sedang' : 'Normal');
+    let bodyHtml = `
+      <div><div class="ig-label">Induk (Parent)</div>${parent ? `<a href="javascript:void(0)" onclick="showTopoInspector('${parent.id}')">${deviceLabel(parent)}</a>` : '— (root / MikroTik)'}</div>
+      <div><div class="ig-label">Keluar dari Port Induk</div>${n.parent_port || '—'}</div>
+      <div><div class="ig-label">Masuk ke Port (di perangkat ini)</div>${n.uplink_port || '—'}</div>
       <div><div class="ig-label">Alamat IP</div>${deviceIp(n) || '—'}</div>
-      <div><div class="ig-label">Anak Langsung</div>${children.length} perangkat</div>
       <div><div class="ig-label">Panjang Kabel ke Induk</div>${points.length ? cableLengthLabel(link, points) : '—'}</div>
-      <div><div class="ig-label">Trafik</div>${traf ? `↓${traf.down!=null?traf.down.toFixed(1):'—'} / ↑${traf.up!=null?traf.up.toFixed(1):'—'} Mbps` : '—'}</div>
-      <div><div class="ig-label">Pelanggan Terhubung</div>${h.total>0 ? `${h.online} online · ${h.offline} offline · ${h.isolir} isolir` : 'Tidak ada'}</div>
+      <div><div class="ig-label">Trafik Total di Jalur Ini</div>${traf ? `<span style="color:${linkColorNow}; font-weight:600;">↓${traf.down!=null?traf.down.toFixed(1):'—'} / ↑${traf.up!=null?traf.up.toFixed(1):'—'} Mbps</span>${trafficLevelLabel ? ` <span class="muted">(${trafficLevelLabel})</span>` : ''}` : '—'}</div>
+      <div><div class="ig-label">Pelanggan Terhubung Langsung</div>${h.total>0 ? `${h.online} online · ${h.offline} offline · ${h.isolir} isolir` : 'Tidak ada'}</div>
     `;
+    document.getElementById('topo-inspector-body').innerHTML = bodyHtml;
+
+    // ---------- Item 8: jalur beban tinggi (merah) → tunjukkan pelanggan
+    // pemakaian tertinggi di jalur ini, supaya langsung kelihatan siapa
+    // "biang" trafiknya tanpa harus cek satu-satu ke bawah. ----------
+    let topUsageHtml = '';
+    if(linkColorNow === '#dc2626'){
+      const descendants = collectDescendantCustomers(n.id, siteNodes)
+        .map(c=>({ c, total: (c.traffic_down_mbps||0) + (c.traffic_up_mbps||0) }))
+        .filter(x=>x.total > 0)
+        .sort((a,b)=>b.total-a.total);
+      if(descendants.length){
+        const top = descendants[0];
+        topUsageHtml = `
+          <div class="dblock" style="margin-top:12px; border-color:#dc2626; background:#fef2f2;">
+            <div class="ig-label" style="color:#dc2626;">⚠ Trafik tinggi — pemakaian terbesar di jalur ini</div>
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:4px;">
+              <div><strong>${top.c.name}</strong> <span class="muted mono-cell">(${top.c.customer_code})</span></div>
+              <div class="mono-cell" style="font-weight:600;">↓${(top.c.traffic_down_mbps||0).toFixed(1)} / ↑${(top.c.traffic_up_mbps||0).toFixed(1)} Mbps</div>
+            </div>
+            ${descendants.length>1 ? `<div class="muted" style="font-size:11px; margin-top:4px;">+${descendants.length-1} pelanggan lain juga memakai jalur ini</div>` : ''}
+          </div>`;
+      }
+    }
+    const topUsageBox = document.getElementById('topo-inspector-top-usage');
+    if(topUsageBox) topUsageBox.innerHTML = topUsageHtml;
+
+    // ---------- Kalau node ini punya pelanggan yang ter-link langsung ----------
+    const custBox = document.getElementById('topo-inspector-customer');
+    if(linkedCustomer){
+      custBox.style.display = '';
+      custBox.innerHTML = `
+        <div class="ig-label">Pelanggan di Titik Ini</div>
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
+          <div><strong>${linkedCustomer.name}</strong> <span class="muted mono-cell">(${linkedCustomer.customer_code})</span> — ${linkedCustomer.status}</div>
+          <button class="btn btn-ghost" style="width:auto; padding:6px 12px; font-size:11.5px;" onclick="closeTopoInspectorAndOpenDrawer('${linkedCustomer.id}')">Lihat Detail →</button>
+        </div>
+      `;
+    } else {
+      custBox.style.display = 'none';
+      custBox.innerHTML = '';
+    }
+
+    // ---------- Daftar anak langsung (siapa saja yang masuk ke sini, per port) ----------
+    const childrenBox = document.getElementById('topo-inspector-children');
+    if(children.length){
+      childrenBox.innerHTML = `<div class="ig-label" style="margin-bottom:6px;">Terhubung Masuk ke Perangkat Ini (${children.length})</div>` +
+        children.map(c=>{
+          const ct = getNodeTrafficRollup(c, siteNodes);
+          const ch2 = nodeHealth(c.id);
+          const cLinked = customers.find(x=>x.node_id===c.id);
+          return `<div class="topo-child-row" onclick="showTopoInspector('${c.id}')">
+            <div>
+              <strong>${deviceLabel(c)}</strong> <span class="muted">· ${deviceTypeLabel(c.type)}</span>
+              ${c.parent_port ? `<span class="mono-cell muted"> · Keluar Port: ${c.parent_port}${c.uplink_port ? ' → Masuk Port: '+c.uplink_port : ''}</span>` : ''}
+              ${cLinked ? `<div class="muted" style="font-size:11px;">Pelanggan: ${cLinked.name}</div>` : ''}
+            </div>
+            <div style="text-align:right; font-size:11px;" class="muted">
+              ${ct ? `<span style="color:${trafficLinkColor(ct)}; font-weight:600;">↓${ct.down!=null?ct.down.toFixed(1):'—'}/↑${ct.up!=null?ct.up.toFixed(1):'—'} Mbps</span>` : ''}
+              ${ch2.total>0 ? `<br>${ch2.online} online · ${ch2.offline+ch2.isolir} bermasalah` : ''}
+            </div>
+          </div>`;
+        }).join('');
+    } else {
+      childrenBox.innerHTML = `<div class="empty-note">Tidak ada perangkat lain yang terhubung masuk ke sini.</div>`;
+    }
+
+    // 🗑️ Panel "Dipakai Pelanggan (trafik aktif sekarang)" DIHAPUS (permintaan
+    // eksplisit) — sebelumnya menampilkan SEMUA pelanggan turunan di SETIAP
+    // level ancestor (klik Server Ruko/root menampilkan 33 pelanggan, lalu
+    // klik HTB di bawahnya menampilkan subset yang sama lagi) — dobel dan
+    // membingungkan. Detail pelanggan tetap terlihat, tapi HANYA di titik
+    // tempat dia benar-benar terhubung (custBox di atas), dilihat dengan
+    // navigasi klik-turun lewat childrenBox.
+
     panel.style.display = '';
-    panel.scrollIntoView({ behavior:'smooth', block:'nearest' });
+    if(scrollTo) panel.scrollIntoView({ behavior:'smooth', block:'nearest' });
+  }
+
+  function closeTopoInspectorAndOpenDrawer(customerId){
+    openDrawer(customerId);
   }
 
   function renderNetworkTopologyDiagram(){
     const el = document.getElementById('network-topology-diagram'); if(!el) return;
     const scoped = networkNodes.filter(inSite);
     const relevantSites = currentSite==='all' ? sites : sites.filter(s=>s.id===currentSite);
+
+    // 🐛 FIX item 5 ("geser kiri/kanan lalu kembali ke awal sendiri"): akar
+    // penyebabnya, el.innerHTML='' di bawah menghapus TOTAL elemen scroll lama
+    // lalu bikin ulang dari nol tiap render (dipicu update trafik live tiap
+    // ~20 detik) — otomatis scrollLeft balik ke 0. Sekarang posisi scroll
+    // disimpan per-server SEBELUM dihapus, lalu dipulihkan lagi setelah
+    // render selesai, supaya user yang lagi geser lihat topologi tidak
+    // "dilempar" balik ke awal di tengah-tengah.
+    const savedScroll = {};
+    el.querySelectorAll('.topo-scroll[data-site-id]').forEach(elx=>{
+      savedScroll[elx.dataset.siteId] = elx.scrollLeft;
+    });
     el.innerHTML = '';
 
     if(!scoped.length){
@@ -3864,7 +4703,13 @@
       const siteNodes = scoped.filter(n=>n.site_id===site.id);
       if(!siteNodes.length) return;
 
-      const levels = computeTopoLevels(siteNodes);
+      // Mode Sederhana melipat RANTAI pass-through (1→1→1 tanpa cabang/pelanggan)
+      // dulu, baru buildDisplayNodes meringkas SIBLING sejenis yang jumlahnya
+      // banyak di satu induk (mis. 8 "Router (Pelanggan)" jadi 1 kotak "8
+      // Pelanggan") — dua sumbu penyederhanaan yang berbeda, saling melengkapi.
+      const chainCollapsed = topologySimpleMode ? buildSimplifiedNodeList(siteNodes) : siteNodes;
+      const displayNodes = buildDisplayNodes(chainCollapsed);
+      const levels = computeTopoLevels(displayNodes);
       const maxPerLevel = Math.max(...levels.map(l=>l.length));
       const svgW = Math.max(maxPerLevel * (BOX_W+HGAP) + PAD, BOX_W + PAD*2);
       const svgH = levels.length * (BOX_H+VGAP) + PAD;
@@ -3881,16 +4726,22 @@
       const block = document.createElement('div');
       block.className = 'topo-site-block';
       const problemCount = siteNodes.filter(n=>{ const h=nodeHealth(n.id); return h.cls==='warn'||h.cls==='bad'; }).length;
-      block.innerHTML = `<div class="dsg-head">${site.name}<span class="muted">${siteNodes.length} perangkat · ${problemCount} bermasalah</span></div>`;
+      const aggCount = displayNodes.filter(n=>n.type==='__aggregate__').length;
+      const hiddenByChain = siteNodes.length - chainCollapsed.length;
+      const countNote = topologySimpleMode && hiddenByChain > 0
+        ? `${chainCollapsed.length} dari ${siteNodes.length} perangkat ditampilkan (${hiddenByChain} pass-through disederhanakan)`
+        : `${siteNodes.length} perangkat`;
+      block.innerHTML = `<div class="dsg-head">${site.name}<span class="muted">${countNote}${aggCount ? ` · ${aggCount} kelompok diringkas` : ''} · ${problemCount} bermasalah</span><span class="hint" style="margin-left:auto;">↔ geser untuk lihat semua</span></div>`;
       const scrollWrap = document.createElement('div');
       scrollWrap.className = 'topo-scroll';
+      scrollWrap.dataset.siteId = site.id;
 
       const svg = document.createElementNS(NS, 'svg');
       svg.setAttribute('width', svgW);
       svg.setAttribute('height', svgH);
       svg.setAttribute('viewBox', `0 0 ${svgW} ${svgH}`);
 
-      siteNodes.forEach(n=>{
+      displayNodes.forEach(n=>{
         if(!n.parent_id || !pos[n.parent_id]) return;
         const p = pos[n.parent_id], c = pos[n.id];
         const x1 = p.x + BOX_W/2, y1 = p.y + BOX_H;
@@ -3905,21 +4756,66 @@
         // banyak percabangan/pelanggan (lihat catatan). Warna+animasi garis (biru
         // putus-putus mengalir vs abu-abu statis) sudah cukup menunjukkan mana yang
         // ada trafiknya sekilas pandang; angka presisinya tersedia saat hover/tap.
-        const traf = getNodeTrafficRollup(n, siteNodes);
+        const traf = n.type==='__aggregate__' ? (()=>{ const s=aggregateSummary(n, siteNodes); return {down:s.down, up:s.up}; })() : getNodeTrafficRollup(n, siteNodes);
         const pathTitle = document.createElementNS(NS, 'title');
-        pathTitle.textContent = traf
+        const skipNote = (n._skippedNames && n._skippedNames.length) ? ` (melewati ${n._skippedNames.length} perangkat: ${n._skippedNames.join(', ')})` : '';
+        pathTitle.textContent = (traf
           ? `${deviceLabel(n)} — ↓${traf.down!=null?traf.down.toFixed(1):'—'} / ↑${traf.up!=null?traf.up.toFixed(1):'—'} Mbps`
-          : `${deviceLabel(n)} — tidak ada data trafik`;
+          : `${deviceLabel(n)} — tidak ada data trafik`) + skipNote;
         path.appendChild(pathTitle);
+        if(n._skippedNames && n._skippedNames.length){
+          path.setAttribute('stroke-dasharray', '2,3'); // beda dari garis biasa — nanda garis ini "dilipat"
+        }
         svg.appendChild(path);
 
         if(traf && ((traf.down||0) > 0 || (traf.up||0) > 0)){
           path.setAttribute('class', 'topo-link topo-link-active');
+          path.style.stroke = trafficLinkColor(traf); // item 8: hijau <50, biru ~50, merah ≥90 Mbps
         }
       });
 
-      siteNodes.forEach(n=>{
+      displayNodes.forEach(n=>{
         const p = pos[n.id]; if(!p) return;
+
+        // ---------- Kotak AGREGAT (ratusan pelanggan diringkas jadi 1 kotak) ----------
+        if(n.type==='__aggregate__'){
+          const s = aggregateSummary(n, siteNodes);
+          const cls = s.total>0 ? ((s.offline+s.isolir)===0 ? 'ok' : (s.offline+s.isolir)/s.total < 0.5 ? 'warn' : 'bad') : 'none';
+          const g = document.createElementNS(NS, 'g');
+          g.setAttribute('class', `topo-node-box topo-node-aggregate health-${cls}`);
+          g.setAttribute('transform', `translate(${p.x},${p.y})`);
+          g.style.cursor = 'pointer';
+          g.addEventListener('click', ()=>openAggregateModal(n));
+
+          const title_ = document.createElementNS(NS, 'title');
+          title_.textContent = `${n._leafNodes.length} perangkat diringkas — klik untuk lihat & cari satu-satu`;
+          g.appendChild(title_);
+
+          const rect = document.createElementNS(NS, 'rect');
+          rect.setAttribute('width', BOX_W); rect.setAttribute('height', BOX_H); rect.setAttribute('rx', 8);
+          rect.setAttribute('stroke-dasharray', '4,3');
+          g.appendChild(rect);
+
+          const title = document.createElementNS(NS, 'text');
+          title.setAttribute('class', 'topo-title'); title.setAttribute('x', 10); title.setAttribute('y', 21);
+          title.textContent = `⊞ ${n._leafNodes.length} Pelanggan`;
+          g.appendChild(title);
+
+          const sub = document.createElementNS(NS, 'text');
+          sub.setAttribute('class', 'topo-sub'); sub.setAttribute('x', 10); sub.setAttribute('y', 36);
+          sub.textContent = 'Router / AP (diringkas)';
+          g.appendChild(sub);
+
+          const sub2 = document.createElementNS(NS, 'text');
+          sub2.setAttribute('class', 'topo-sub'); sub2.setAttribute('x', 10); sub2.setAttribute('y', 48);
+          sub2.textContent = s.total>0 ? `${s.online} online · ${s.offline+s.isolir} bermasalah` : 'klik untuk lihat daftar';
+          g.appendChild(sub2);
+
+          svg.appendChild(g);
+          return;
+        }
+
+        // ---------- Kotak normal (perangkat individual) ----------
         const h = nodeHealth(n.id);
         const ip = deviceIp(n);
         const isDimmed = topologyFilter==='problem' && h.cls!=='warn' && h.cls!=='bad';
@@ -3930,9 +4826,10 @@
         g.addEventListener('click', ()=>showTopoInspector(n.id));
 
         const title_ = document.createElementNS(NS, 'title');
-        title_.textContent = h.total>0
+        const skipNote2 = (n._skippedNames && n._skippedNames.length) ? ` — melewati ${n._skippedNames.length} perangkat pass-through: ${n._skippedNames.join(', ')} (klik "Detail" untuk lihat satu-satu)` : '';
+        title_.textContent = (h.total>0
           ? `${deviceLabel(n)} — ${h.online} online, ${h.offline} offline, ${h.isolir} isolir`
-          : `${deviceLabel(n)} — tidak ada pelanggan terhubung`;
+          : `${deviceLabel(n)} — tidak ada pelanggan terhubung`) + skipNote2;
         g.appendChild(title_);
 
         const rect = document.createElementNS(NS, 'rect');
@@ -3946,12 +4843,14 @@
 
         const sub = document.createElementNS(NS, 'text');
         sub.setAttribute('class', 'topo-sub'); sub.setAttribute('x', 10); sub.setAttribute('y', 36);
-        sub.textContent = deviceTypeLabel(n.type) + (ip ? ' · '+ip : '');
+        sub.textContent = deviceTypeLabel(n.type) + (n.parent_port ? ` · Port: ${n.parent_port}${n.uplink_port ? ' → '+n.uplink_port : ''}` : (ip ? ' · '+ip : ''));
         g.appendChild(sub);
 
         const sub2 = document.createElementNS(NS, 'text');
         sub2.setAttribute('class', 'topo-sub'); sub2.setAttribute('x', 10); sub2.setAttribute('y', 48);
-        sub2.textContent = h.total>0 ? `${h.online} online · ${h.offline+h.isolir} bermasalah` : 'tidak ada pelanggan';
+        sub2.textContent = (n._skippedNames && n._skippedNames.length)
+          ? `⋯ melewati ${n._skippedNames.length} perangkat`
+          : (h.total>0 ? `${h.online} online · ${h.offline+h.isolir} bermasalah` : 'tidak ada pelanggan');
         g.appendChild(sub2);
 
         svg.appendChild(g);
@@ -3960,6 +4859,18 @@
       scrollWrap.appendChild(svg);
       block.appendChild(scrollWrap);
       el.appendChild(block);
+
+      // Item 1: pengalaman pertama kali dibuka lebih optimal di mobile —
+      // kalau belum pernah digeser sebelumnya, mulai dari TENGAH pohon
+      // (biasanya root/MikroTik ada di situ), bukan mentok kiri yang bikin
+      // separuh topologi langsung kepotong di layar sempit.
+      requestAnimationFrame(()=>{
+        if(savedScroll[site.id] != null){
+          scrollWrap.scrollLeft = savedScroll[site.id];
+        } else {
+          scrollWrap.scrollLeft = Math.max(0, (svgW - scrollWrap.clientWidth) / 2);
+        }
+      });
       } catch(e){
         // Diagnostik: sebelumnya kegagalan di sini bikin seluruh kotak topologi
         // blank tanpa jejak apa pun (el.innerHTML sudah dikosongkan di atas,
@@ -3988,7 +4899,7 @@
       panel.style.display = 'none';
       topoInspectorNodeId = null;
     } else if(panel && topoInspectorNodeId){
-      showTopoInspector(topoInspectorNodeId); // refresh data kalau masih terbuka
+      showTopoInspector(topoInspectorNodeId, false); // refresh data kalau masih terbuka, JANGAN ikut scroll
     }
   }
 
@@ -4003,9 +4914,13 @@
   let topologyViewMode = 'diagram';
   let topologyMapInstance = null;
   let topologyMarkers = {};       // node_id -> L.marker
+  let topologyLastFitSite; // sama seperti customerMapLastFitSite — fit sekali per ganti server saja
+  let topologyDevicePopup = null; // satu popup dipakai ulang untuk hover marker device
   let topologyPolylines = {};     // node_id (anak) -> L.polyline (jalur induk→anak)
   let topologyWaypointHandles = []; // handle draggable titik tengah jalur yang sedang diedit
   let editPathMode = false;
+  let editDeviceMode = false; // mode terpisah dari editPathMode — KHUSUS memindah posisi marker perangkat
+  let pendingDeviceMove = null; // {nodeId, lat, lng} — posisi baru hasil drag yang BELUM disimpan ke DB
   let editingLinkNodeId = null;   // node_id (anak) dari link yang sedang diedit
   let editingWaypoints = [];      // salinan kerja [[lat,lng], ...] sebelum disimpan
   let placingNewDevice = false;
@@ -4060,7 +4975,7 @@
         container: 'topology-map',
         center: [107.6, -6.9], // [lng, lat] — Indonesia, otomatis fit ke node begitu ada data
         zoom: 13,
-        style: MAPTILER_STYLE_URL,
+        style: GOOGLE_SAT_STYLE,
       });
     } catch(e){
       mapEl.innerHTML = `<div class="empty-note" style="color:var(--off); padding:16px;">Peta gagal diinisialisasi: ${e && e.message ? e.message : e}</div>`;
@@ -4093,19 +5008,21 @@
       topologyMapInstance.addLayer({
         id: 'links-layer', type:'line', source:'links-source',
         filter: ['!', ['get','hasTraffic']],
+        layout: { 'line-cap':'round', 'line-join':'round' },
         paint: {
           'line-color': ['get','color'],
-          'line-width': 3,
-          'line-opacity': 0.85,
+          'line-width': 6,
+          'line-opacity': 0.9,
         },
       });
       topologyMapInstance.addLayer({
         id: 'links-layer-active', type:'line', source:'links-source',
         filter: ['==', ['get','hasTraffic'], true],
+        layout: { 'line-cap':'round', 'line-join':'round' },
         paint: {
           'line-color': ['get','color'],
-          'line-width': 4,
-          'line-opacity': 0.85,
+          'line-width': 7,
+          'line-opacity': 0.9,
           'line-dasharray': [1,1.2], // nilai TETAP, bukan expression — ini yang diizinkan
         },
       });
@@ -4132,15 +5049,40 @@
     mapEl.appendChild(searchBox);
     attachAddressAutocomplete('topology-map-search', 'topology-map-search-list', topologyMapInstance);
 
-    // Kotak status router live (CPU/RAM/Disk/Uptime) — sama seperti sebelumnya,
-    // cuma DOM overlay biasa, bukan Leaflet control lagi.
-    const liveBox = document.createElement('div');
-    liveBox.className = 'topo-livebox';
-    liveBox.id = 'topology-livebox';
-    liveBox.style.display = 'none';
-    mapEl.appendChild(liveBox);
+    // Tombol "Tampilkan Semua" — sama seperti di Peta Pelanggan, kembali ke
+    // tampilan semua perangkat kalau peta digeser terlalu jauh.
+    const fitBtn = document.createElement('div');
+    fitBtn.className = 'map-fit-btn';
+    fitBtn.title = 'Tampilkan semua perangkat';
+    fitBtn.innerHTML = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>`;
+    fitBtn.onclick = () => fitTopologyMapToAll();
+    mapEl.appendChild(fitBtn);
+
+    const locateBtn = document.createElement('div');
+    locateBtn.className = 'map-locate-btn';
+    locateBtn.title = 'Lokasi saya';
+    locateBtn.innerHTML = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>`;
+    locateBtn.onclick = () => locateMe(topologyMapInstance, 'topology', locateBtn);
+    mapEl.appendChild(locateBtn);
+
+    // Case 6: tombol hide/unhide nama perangkat (label "HTB dzikra" dkk yang
+    // nempel permanen di bawah tiap marker) — berguna kalau nanti perangkatnya
+    // ribuan, label yang selalu tampil bikin peta penuh sesak.
+    const labelsBtn = document.createElement('div');
+    labelsBtn.className = 'map-labels-toggle-btn';
+    labelsBtn.title = 'Sembunyikan/tampilkan nama perangkat';
+    labelsBtn.innerHTML = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>`;
+    labelsBtn.onclick = () => {
+      const hidden = mapEl.classList.toggle('topo-labels-hidden');
+      labelsBtn.classList.toggle('on', hidden);
+    };
+    mapEl.appendChild(labelsBtn);
 
     topologyMapInstance.on('click', (e)=>{
+      if(bulkLocateDeviceActive && bulkLocateDeviceCurrentId){
+        assignBulkLocateDeviceCoord(e.lngLat.lat, e.lngLat.lng);
+        return;
+      }
       if(placingNewDevice){
         placingNewDevice = false;
         document.getElementById('map-mode-hint').textContent = '';
@@ -4150,7 +5092,18 @@
       if(editPathMode && editingLinkNodeId){
         editingWaypoints.push([e.lngLat.lat, e.lngLat.lng]);
         redrawEditingPath();
+        return;
       }
+      // Case 2/5/7: klik area KOSONG (bukan marker, bukan jalur kabel) menutup
+      // popup info yang sedang terbuka. Marker punya event listener sendiri
+      // (stopPropagation, tidak sampai ke sini). Jalur kabel dirender sebagai
+      // layer canvas, jadi klik di atasnya JUGA memicu handler generik ini —
+      // makanya perlu query ulang apakah titik klik kena jalur, supaya popup
+      // jalur yang baru saja dibuka tidak langsung ditutup lagi di sini.
+      const hitLinks = topologyMapInstance.queryRenderedFeatures(e.point, { layers:['links-layer','links-layer-active'] });
+      if(hitLinks && hitLinks.length) return;
+      if(topologyDevicePopup) topologyDevicePopup.remove();
+      if(topologyPopup) topologyPopup.remove();
     });
   }
 
@@ -4158,7 +5111,12 @@
     const q = (query||'').trim();
     if(!q || !mapInstance) return;
     try {
-      const res = await fetch(`https://api.maptiler.com/geocoding/${encodeURIComponent(q)}.json?key=${MAPTILER_KEY}&limit=1&language=id`);
+      // Case 3: akurasi pencarian alamat — batasi ke Indonesia (country=id) dan
+      // bias hasil ke area yang sedang dilihat di peta (proximity=lng,lat pusat
+      // peta saat ini), supaya nama jalan/tempat umum tidak nyasar ke kota lain.
+      const center = mapInstance.getCenter ? mapInstance.getCenter() : null;
+      const proximity = center ? `&proximity=${center.lng},${center.lat}` : '';
+      const res = await fetch(`https://api.maptiler.com/geocoding/${encodeURIComponent(q)}.json?key=${MAPTILER_KEY}&limit=1&language=id&country=id${proximity}`);
       const json = await res.json();
       const feat = json && json.features && json.features[0];
       if(!feat){ showToast('Alamat tidak ditemukan'); return; }
@@ -4176,24 +5134,43 @@
   // tekan Enter dulu), pakai MapTiler Geocoding API (key sama dengan peta,
   // sudah Anda punya, jadi tidak perlu API key terpisah). Dipakai bareng oleh
   // Topologi Jaringan & Peta Pelanggan lewat satu fungsi ini.
-  function attachAddressAutocomplete(inputId, listId, mapInstance){
+  function attachAddressAutocomplete(inputId, listId, mapInstance, opts){
+    opts = opts || {};
+    const searchCustomers = !!opts.searchCustomers;
     const input = document.getElementById(inputId);
     const list = document.getElementById(listId);
     if(!input || !list) return;
     let debounceTimer = null;
-    let currentFeatures = [];
+    let currentItems = []; // unified: {kind:'customer'|'address', label, lat, lng, id?}
 
-    function closeList(){ list.style.display = 'none'; list.innerHTML = ''; currentFeatures = []; }
+    function closeList(){ list.style.display = 'none'; list.innerHTML = ''; currentItems = []; }
 
     async function fetchSuggestions(q){
+      let items = [];
+      // Cari pelanggan lokal dulu (by nama atau ID pelanggan) — prioritas di atas
+      // hasil geocoding alamat, karena kalau user ketik nama pelanggan, itu jelas
+      // yang dia maksud, bukan alamat generik.
+      if(searchCustomers){
+        const qLower = q.toLowerCase();
+        items = customers
+          .filter(c => c.lat!=null && c.lng!=null)
+          .filter(c => (c.name||'').toLowerCase().includes(qLower) || (c.customer_code||'').toLowerCase().includes(qLower))
+          .slice(0, 5)
+          .map(c => ({ kind:'customer', id:c.id, label:`👤 ${c.name} — ${c.customer_code}`, lat:Number(c.lat), lng:Number(c.lng) }));
+      }
       try {
-        const res = await fetch(`https://api.maptiler.com/geocoding/${encodeURIComponent(q)}.json?key=${MAPTILER_KEY}&autocomplete=true&limit=6&language=id`);
+        const center = mapInstance.getCenter ? mapInstance.getCenter() : null;
+        const proximity = center ? `&proximity=${center.lng},${center.lat}` : '';
+        const res = await fetch(`https://api.maptiler.com/geocoding/${encodeURIComponent(q)}.json?key=${MAPTILER_KEY}&autocomplete=true&limit=6&language=id&country=id${proximity}`);
         const json = await res.json();
-        currentFeatures = (json && json.features) || [];
-        if(!currentFeatures.length){ closeList(); return; }
-        list.innerHTML = currentFeatures.map((f,i) => `<div class="addr-suggest-item" data-idx="${i}">${f.place_name}</div>`).join('');
-        list.style.display = 'block';
-      } catch(e){ closeList(); }
+        const feats = (json && json.features) || [];
+        items = items.concat(feats.map(f => ({ kind:'address', label:f.place_name, lat:f.center[1], lng:f.center[0] })));
+      } catch(e){ /* geocoding gagal, hasil pelanggan lokal (kalau ada) tetap ditampilkan */ }
+
+      currentItems = items;
+      if(!items.length){ closeList(); return; }
+      list.innerHTML = items.map((it,i) => `<div class="addr-suggest-item" data-idx="${i}">${it.label}</div>`).join('');
+      list.style.display = 'block';
     }
 
     input.addEventListener('input', () => {
@@ -4206,12 +5183,14 @@
     list.addEventListener('click', (e) => {
       const item = e.target.closest('.addr-suggest-item');
       if(!item) return;
-      const f = currentFeatures[parseInt(item.dataset.idx, 10)];
-      if(!f) return;
-      const [lon, lat] = f.center;
-      mapInstance.flyTo({ center: [lon, lat], zoom: 17 });
-      input.value = f.place_name;
+      const it = currentItems[parseInt(item.dataset.idx, 10)];
+      if(!it) return;
+      mapInstance.flyTo({ center: [it.lng, it.lat], zoom: 18 });
+      input.value = it.label;
       closeList();
+      // Item eksplisit: kalau yang ditemukan pelanggan, langsung buka detailnya —
+      // tidak usah klik titiknya lagi.
+      if(it.kind === 'customer') openDrawer(it.id);
     });
 
     input.addEventListener('keydown', (e) => {
@@ -4229,6 +5208,77 @@
   }
 
   let topologyPopup = null; // satu maplibregl.Popup dipakai ulang untuk hover jalur kabel
+
+  // Marker "posisi saya" per peta — disimpan terpisah karena topology &
+  // customer map adalah 2 instance MapLibre yang berbeda.
+  let myLocationMarkers = { topology:null, customer:null };
+
+  function locateMe(mapInstance, key, btnEl){
+    if(!mapInstance) return;
+    if(!navigator.geolocation){ showToast('Perangkat/browser ini tidak mendukung GPS'); return; }
+    btnEl.classList.add('loading');
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        btnEl.classList.remove('loading');
+        const { latitude, longitude } = pos.coords;
+        if(myLocationMarkers[key]) myLocationMarkers[key].remove();
+        const el = document.createElement('div');
+        el.className = 'my-location-dot';
+        myLocationMarkers[key] = new maplibregl.Marker({ element: el, anchor:'center' })
+          .setLngLat([longitude, latitude])
+          .addTo(mapInstance);
+        mapInstance.flyTo({ center: [longitude, latitude], zoom: 17 });
+      },
+      (err) => {
+        btnEl.classList.remove('loading');
+        // Pesan berbeda per jenis error supaya user tahu harus benerin apa,
+        // bukan cuma "gagal" generik.
+        if(err.code === err.PERMISSION_DENIED){
+          showToast('Izin lokasi ditolak — aktifkan izin lokasi untuk situs ini di pengaturan browser');
+        } else if(err.code === err.TIMEOUT){
+          showToast('Gagal dapat lokasi — sinyal GPS lemah, coba lagi di tempat terbuka');
+        } else {
+          showToast('Gagal mendapatkan lokasi: ' + err.message);
+        }
+      },
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
+    );
+  }
+
+  function fitTopologyMapToAll(){
+    if(!topologyMapInstance) return;
+    const scopedAll = networkNodes.filter(n => currentSite==='all' || n.site_id===currentSite);
+    const pts = scopedAll.map(n=>nodeLatLng(n)).filter(Boolean);
+    if(!pts.length) return;
+    const lngs = pts.map(p=>p[1]), lats = pts.map(p=>p[0]);
+    topologyMapInstance.fitBounds([[Math.min(...lngs),Math.min(...lats)],[Math.max(...lngs),Math.max(...lats)]], { padding:40, maxZoom:18 });
+  }
+
+  // Tooltip hover untuk marker device — sebelumnya cuma garis kabel yang punya
+  // info hover, marker perangkat harus diklik dulu (buka modal penuh) baru
+  // kelihatan status/kapasitasnya. Sekarang cukup hover, mirip pola tooltip
+  // kabel yang sudah ada.
+  function buildDeviceTooltipHtml(n){
+    const h = nodeHealth(n.id);
+    const siteNodes = networkNodes.filter(x => currentSite==='all' || x.site_id===currentSite);
+    const traf = getNodeTrafficRollup(n, siteNodes);
+    const childCount = networkNodes.filter(x=>x.parent_id===n.id).length;
+    let portsLine = '';
+    if(PORTED_TYPES.includes(n.type) || LAN_PORTED_TYPES.includes(n.type)){
+      const a = n.ports_a||0, b = n.ports_b||0;
+      portsLine = `<div class="tdt-row"><span>Port</span><span>${a}${b?` + ${b}`:''}</span></div>`;
+    }
+    return `<div class="topo-device-tooltip">
+      <div class="tdt-head">${deviceLabel(n)}</div>
+      <div class="tdt-row"><span>Tipe</span><span>${deviceTypeLabel(n.type)}</span></div>
+      ${h.total>0 ? `<div class="tdt-row"><span>Pelanggan</span><span>${h.online}/${h.total} online</span></div>` : ''}
+      ${h.avgSignal!=null ? `<div class="tdt-row"><span>Sinyal rata-rata</span><span>${h.avgSignal.toFixed(1)} dBm</span></div>` : ''}
+      ${traf ? `<div class="tdt-row"><span>Trafik</span><span>↓${traf.down!=null?traf.down.toFixed(1):'—'} / ↑${traf.up!=null?traf.up.toFixed(1):'—'} Mbps</span></div>` : ''}
+      ${portsLine}
+      ${childCount>0 ? `<div class="tdt-row"><span>Turunan</span><span>${childCount} perangkat</span></div>` : ''}
+      <button class="btn btn-ghost" style="width:100%; margin-top:8px; padding:6px 4px; font-size:11px;" onclick="openDeviceModal('edit','${n.id}')">Edit Perangkat Ini →</button>
+    </div>`;
+  }
 
   function renderTopologyMap(){
     if(!topologyMapInstance || !topologyMapInstance.getSource) return;
@@ -4261,10 +5311,14 @@
       const hasTraffic = !!(traf && ((traf.down||0) > 0 || (traf.up||0) > 0));
       const cableLabel = cableLengthLabel(link, points);
       const trafLabel = traf ? `↓${traf.down!=null?traf.down.toFixed(1):'—'} / ↑${traf.up!=null?traf.up.toFixed(1):'—'} Mbps` : null;
+      // Item 8: warna jalur = beban trafik (hijau/biru/merah), BUKAN warna
+      // tipe perangkat lagi — supaya jalur yang mendekati penuh langsung
+      // kelihatan dari jauh tanpa harus klik satu-satu.
+      const linkColor = hasTraffic ? trafficLinkColor(traf) : meta.color;
 
       linkFeatures.push({
         type:'Feature',
-        properties: { node_id:n.id, color:meta.color, hasTraffic, cableLabel, trafLabel, deviceLabel:deviceLabel(n), typeLabel:deviceTypeLabel(n.type) },
+        properties: { node_id:n.id, color:linkColor, hasTraffic, cableLabel, trafLabel, deviceLabel:deviceLabel(n), typeLabel:deviceTypeLabel(n.type) },
         geometry: { type:'LineString', coordinates: points.map(toLngLat) },
       });
       points.forEach(p=>bounds.push(p));
@@ -4279,25 +5333,28 @@
         topologyMapInstance.on('mousemove', layerId, (e)=>{
           if(editPathMode) return;
           topologyMapInstance.getCanvas().style.cursor = 'pointer';
-          const f = e.features[0]; if(!f) return;
-          const html = `<div class="topo-link-popup"><div class="tlp-title">${f.properties.typeLabel}</div><div class="tlp-row"><span>Menuju</span><span>${f.properties.deviceLabel}</span></div><div class="tlp-row"><span>Panjang kabel</span><span>${f.properties.cableLabel}</span></div>${f.properties.trafLabel ? `<div class="tlp-row"><span>Traffic</span><span>${f.properties.trafLabel}</span></div>` : ''}</div>`;
-          if(!topologyPopup) topologyPopup = new maplibregl.Popup({ closeButton:false, closeOnClick:false, offset:8 });
-          topologyPopup.setLngLat(e.lngLat).setHTML(html).addTo(topologyMapInstance);
         });
         topologyMapInstance.on('mouseleave', layerId, ()=>{
           topologyMapInstance.getCanvas().style.cursor = '';
-          if(topologyPopup) topologyPopup.remove();
         });
+        // Case 7: KLIK jalur kabel (bukan cuma hover, supaya jalan juga di HP/
+        // touch) menampilkan panjang kabel + trafik, dan popup-nya PERSISTEN
+        // (baru hilang kalau area kosong di-tap — lihat guard queryRenderedFeatures
+        // di topologyMapInstance.on('click', ...) generik di bawah).
         topologyMapInstance.on('click', layerId, (e)=>{
-          if(!editPathMode) return;
           const f = e.features[0]; if(!f) return;
-          beginEditPath(f.properties.node_id);
+          if(editPathMode){ beginEditPath(f.properties.node_id); return; }
+          const html = `<div class="topo-link-popup"><div class="tlp-title">${f.properties.typeLabel}</div><div class="tlp-row"><span>Menuju</span><span>${f.properties.deviceLabel}</span></div><div class="tlp-row"><span>Panjang kabel</span><span>${f.properties.cableLabel}</span></div>${f.properties.trafLabel ? `<div class="tlp-row"><span>Traffic</span><span>${f.properties.trafLabel}</span></div>` : ''}</div>`;
+          if(!topologyPopup) topologyPopup = new maplibregl.Popup({ closeButton:true, closeOnClick:false, offset:8 });
+          topologyPopup.setLngLat(e.lngLat).setHTML(html).addTo(topologyMapInstance);
         });
       });
     }
 
     // Marker perangkat
+    const meaningfulMapIds = topologySimpleMode ? computeMeaningfulNodeIds(scoped) : null;
     scoped.forEach(n=>{
+      if(meaningfulMapIds && !meaningfulMapIds.has(n.id)) return; // Mode Sederhana: sembunyikan ikon pass-through, jalur kabelnya tetap tergambar di atas
       const ll = nodeLatLng(n);
       const meta = deviceTypeMeta[n.type] || { color:'#94a3b8', label:n.type, icon:'<circle cx="12" cy="12" r="5"/>' };
       const h = nodeHealth(n.id);
@@ -4315,48 +5372,48 @@
         </div>
         <div class="topo-map-label">${labelText}</div>
       `;
-      el.addEventListener('click', (ev)=>{ ev.stopPropagation(); if(!editPathMode) openDeviceModal('edit', n.id); });
+      el.addEventListener('click', (ev)=>{
+        ev.stopPropagation();
+        if(editPathMode) return;
+        // Case 2 & 5: klik marker HANYA tampilkan popup info (bukan langsung
+        // buka modal Edit — itu bikin dobel tampilan modal+popup sekaligus).
+        // Popup persisten (tidak hilang sendiri) sampai area kosong di-tap —
+        // lihat guard di topologyMapInstance.on('click', ...) generik di bawah.
+        // Tombol "Edit Perangkat Ini →" di dalam popup tetap membuka modal edit
+        // kalau memang dibutuhkan.
+        if(!topologyDevicePopup) topologyDevicePopup = new maplibregl.Popup({ closeButton:true, closeOnClick:false, offset:18 });
+        topologyDevicePopup.setLngLat(toLngLat(ll)).setHTML(buildDeviceTooltipHtml(n)).addTo(topologyMapInstance);
+      });
 
-      const marker = new maplibregl.Marker({ element: el, draggable: !n.locked, anchor:'center' })
+      const marker = new maplibregl.Marker({ element: el, draggable: editDeviceMode && !n.locked, anchor:'center' })
         .setLngLat(toLngLat(ll))
         .addTo(topologyMapInstance);
-      marker.on('dragend', async ()=>{
+      marker.on('dragend', ()=>{
+        if(pendingDeviceMove && pendingDeviceMove.nodeId !== n.id){
+          showToast('Simpan atau batalkan perubahan posisi sebelumnya dulu — satu perangkat dalam satu waktu.');
+          renderTopologyMap(); // balikkan marker ini ke posisi asli, jangan sampai kececer belum tersimpan
+          return;
+        }
         const pos = fromLngLat([marker.getLngLat().lng, marker.getLngLat().lat]); // [lat,lng], konsisten dgn penyimpanan
-        const { error } = await sb.from('network_nodes').update({ lat: pos[0], lng: pos[1] }).eq('id', n.id);
-        if(error){ showToast('Gagal menyimpan posisi: ' + error.message); return; }
-        const idx = networkNodes.findIndex(x=>x.id===n.id);
-        if(idx>-1){ networkNodes[idx].lat = pos[0]; networkNodes[idx].lng = pos[1]; }
-        renderTopologyMap();
+        // TIDAK auto-save — cuma "ditahan" dulu sampai user tekan Simpan.
+        // Kalau batal/pindah mode, marker balik ke posisi asli sendiri lewat render ulang.
+        pendingDeviceMove = { nodeId: n.id, lat: pos[0], lng: pos[1] };
+        document.getElementById('map-mode-hint').innerHTML =
+          `Posisi baru untuk "${deviceLabel(n)}" belum disimpan — ` +
+          `<button class="btn btn-primary" style="width:auto; padding:4px 10px; font-size:11.5px;" onclick="saveDeviceMove()">Simpan</button> ` +
+          `<button class="btn btn-ghost" style="width:auto; padding:4px 10px; font-size:11.5px;" onclick="cancelDeviceMove()">Batal</button>`;
       });
       topologyMarkers[n.id] = marker;
       bounds.push(ll);
     });
 
-    if(bounds.length){
+    // Sama seperti Peta Pelanggan: fit otomatis hanya sekali per ganti server,
+    // bukan tiap render, supaya peta tidak "reset sendiri" tiap ada update data
+    // atau tepat setelah user selesai men-drag 1 marker.
+    if(bounds.length && topologyLastFitSite !== currentSite){
       const lngs = bounds.map(b=>b[1]), lats = bounds.map(b=>b[0]);
       topologyMapInstance.fitBounds([[Math.min(...lngs),Math.min(...lats)],[Math.max(...lngs),Math.max(...lats)]], { padding:40, maxZoom:18 });
-    }
-
-    // Isi/kosongkan kotak status router live sesuai server yang dipilih
-    const liveBox = document.getElementById('topology-livebox');
-    if(liveBox){
-      if(currentSite==='all'){
-        liveBox.style.display = 'none';
-      } else {
-        const stat = siteLiveStats.find(s=>s.site_id===currentSite);
-        if(!stat){
-          liveBox.style.display = 'none';
-        } else {
-          const cls = v => v==null ? '' : v>=90 ? 'tlb-bad' : v>=70 ? 'tlb-warn' : 'tlb-ok';
-          liveBox.style.display = '';
-          liveBox.innerHTML = `
-            <div><b>CPU</b> <span class="${cls(stat.cpu_load)}">${stat.cpu_load!=null ? stat.cpu_load+'%' : '—'}</span></div>
-            <div><b>RAM</b> <span class="${cls(stat.memory_used_percent)}">${stat.memory_used_percent!=null ? stat.memory_used_percent+'%' : '—'}</span></div>
-            <div><b>HDD</b> <span class="${cls(stat.disk_used_percent)}">${stat.disk_used_percent!=null ? stat.disk_used_percent+'%' : '—'}</span></div>
-            <div><b>Up</b> ${stat.uptime || '—'}</div>
-          `;
-        }
-      }
+      topologyLastFitSite = currentSite;
     }
   }
 
@@ -4365,10 +5422,86 @@
     document.getElementById('map-mode-hint').textContent = 'Klik lokasi di peta…';
   }
 
+  // ---------------------------------------------------------------------
+  // ATUR LOKASI MASSAL (Perangkat) — sama persis alurnya dengan versi
+  // Pelanggan (lihat startBulkLocateCustomers) — pilih 1 dari daftar
+  // "belum ada titik", klik sekali di peta, otomatis tersimpan & lanjut ke
+  // perangkat berikutnya, tetap di peta yang sama dari awal sampai selesai.
+  // ---------------------------------------------------------------------
+  let bulkLocateDeviceActive = false;
+  let bulkLocateDeviceQueue = [];
+  let bulkLocateDeviceCurrentId = null;
+
+  function startBulkLocateDevices(){
+    bulkLocateDeviceQueue = networkNodes.filter(inSite).filter(n=>n.lat==null || n.lng==null);
+    if(!bulkLocateDeviceQueue.length){ showToast('Semua perangkat di server ini sudah punya titik lokasi'); return; }
+    bulkLocateDeviceActive = true;
+    placingNewDevice = false;
+    advanceBulkLocateDevice();
+  }
+  function stopBulkLocateDevices(){
+    bulkLocateDeviceActive = false;
+    bulkLocateDeviceQueue = [];
+    bulkLocateDeviceCurrentId = null;
+    document.getElementById('map-mode-hint').textContent = '';
+    renderBulkLocateDevicePanel();
+  }
+  function advanceBulkLocateDevice(){
+    if(!bulkLocateDeviceQueue.length){ bulkLocateDeviceCurrentId = null; renderBulkLocateDevicePanel(); return; }
+    bulkLocateDeviceCurrentId = bulkLocateDeviceQueue[0].id;
+    renderBulkLocateDevicePanel();
+    document.getElementById('map-mode-hint').textContent = `Klik lokasi "${deviceLabel(bulkLocateDeviceQueue[0])}" di peta…`;
+  }
+  function selectBulkLocateDevice(id){
+    bulkLocateDeviceCurrentId = id;
+    const n = bulkLocateDeviceQueue.find(x=>x.id===id);
+    renderBulkLocateDevicePanel();
+    if(n) document.getElementById('map-mode-hint').textContent = `Klik lokasi "${deviceLabel(n)}" di peta…`;
+  }
+  function skipBulkLocateDevice(){
+    bulkLocateDeviceQueue = bulkLocateDeviceQueue.filter(n=>n.id!==bulkLocateDeviceCurrentId);
+    advanceBulkLocateDevice();
+  }
+  async function assignBulkLocateDeviceCoord(lat, lng){
+    const id = bulkLocateDeviceCurrentId; if(!id) return;
+    const { error } = await sb.from('network_nodes').update({ lat, lng }).eq('id', id);
+    if(error){ showToast('Gagal menyimpan lokasi: ' + error.message); return; }
+    const idx = networkNodes.findIndex(n=>n.id===id);
+    if(idx>-1){ networkNodes[idx].lat = lat; networkNodes[idx].lng = lng; }
+    bulkLocateDeviceQueue = bulkLocateDeviceQueue.filter(n=>n.id!==id);
+    renderTopologyMap();
+    showToast('Lokasi tersimpan — lanjut ke berikutnya');
+    advanceBulkLocateDevice();
+  }
+  function renderBulkLocateDevicePanel(){
+    let panel = document.getElementById('bulk-locate-device-panel');
+    if(!bulkLocateDeviceActive){ if(panel) panel.remove(); return; }
+    if(!panel){
+      panel = document.createElement('div');
+      panel.id = 'bulk-locate-device-panel';
+      panel.className = 'bulk-locate-panel';
+      document.getElementById('topology-map').appendChild(panel);
+    }
+    const current = bulkLocateDeviceQueue.find(n=>n.id===bulkLocateDeviceCurrentId);
+    panel.innerHTML = `
+      <div class="blp-head"><strong>Atur Lokasi Massal</strong><button onclick="stopBulkLocateDevices()">✕</button></div>
+      <div class="blp-count">${bulkLocateDeviceQueue.length} perangkat belum ada titik</div>
+      ${current ? `
+        <div class="blp-current">Sekarang: <strong>${deviceLabel(current)}</strong><br><span class="muted">${deviceTypeLabel(current.type)}</span></div>
+        <div class="blp-actions"><button class="btn btn-ghost" onclick="skipBulkLocateDevice()">Lewati</button></div>
+        <div class="blp-hint">Klik lokasinya di peta →</div>
+      ` : `<div class="blp-hint">Semua sudah diberi titik 🎉</div>`}
+      <div class="blp-list">${bulkLocateDeviceQueue.map(n=>`<div class="blp-item ${n.id===bulkLocateDeviceCurrentId?'active':''}" onclick="selectBulkLocateDevice('${n.id}')">${deviceLabel(n)}</div>`).join('')}</div>
+    `;
+  }
+
   function toggleEditPathMode(){
     editPathMode = !editPathMode;
+    if(editPathMode && editDeviceMode){ editDeviceMode = false; cancelDeviceMove(); }
     const btn = document.getElementById('edit-path-toggle-btn');
+    const devBtn = document.getElementById('edit-device-toggle-btn');
     const hint = document.getElementById('map-mode-hint');
+    devBtn.classList.remove('on');
     if(editPathMode){
       btn.classList.add('on');
       hint.textContent = 'Klik jalur untuk edit';
@@ -4377,6 +5510,51 @@
       hint.textContent = '';
       cancelEditPath();
     }
+    renderTopologyMap();
+  }
+
+  // Mode KHUSUS memindah posisi marker perangkat — sengaja dipisah total dari
+  // Edit Jalur Kabel (sebelumnya marker SELALU bisa di-drag kapan saja, jadi
+  // waktu user coba klik jalur kabel malah kesenggol marker & posisinya
+  // langsung ke-save tanpa sadar). Sekarang marker HANYA bisa digeser saat
+  // mode ini aktif, dan hasil geser HARUS ditekan "Simpan" dulu — tidak
+  // auto-save begitu dilepas.
+  function toggleEditDeviceMode(){
+    editDeviceMode = !editDeviceMode;
+    if(editDeviceMode && editPathMode){ editPathMode = false; cancelEditPath(); }
+    const btn = document.getElementById('edit-device-toggle-btn');
+    const pathBtn = document.getElementById('edit-path-toggle-btn');
+    const hint = document.getElementById('map-mode-hint');
+    pathBtn.classList.remove('on');
+    cancelDeviceMove();
+    if(editDeviceMode){
+      btn.classList.add('on');
+      hint.textContent = 'Geser marker perangkat, lalu tekan Simpan';
+    } else {
+      btn.classList.remove('on');
+      hint.textContent = '';
+    }
+    renderTopologyMap();
+  }
+
+  function saveDeviceMove(){
+    if(!pendingDeviceMove) return;
+    const { nodeId, lat, lng } = pendingDeviceMove;
+    sb.from('network_nodes').update({ lat, lng }).eq('id', nodeId).then(({ error })=>{
+      if(error){ showToast('Gagal menyimpan posisi: ' + error.message); return; }
+      const idx = networkNodes.findIndex(x=>x.id===nodeId);
+      if(idx>-1){ networkNodes[idx].lat = lat; networkNodes[idx].lng = lng; }
+      pendingDeviceMove = null;
+      document.getElementById('map-mode-hint').textContent = 'Geser marker perangkat, lalu tekan Simpan';
+      showToast('Posisi perangkat disimpan');
+      renderTopologyMap();
+    });
+  }
+  function cancelDeviceMove(){
+    if(!pendingDeviceMove) return;
+    pendingDeviceMove = null;
+    if(editDeviceMode) document.getElementById('map-mode-hint').textContent = 'Geser marker perangkat, lalu tekan Simpan';
+    renderTopologyMap(); // marker kembali ke posisi asli (belum ditulis ke DB, jadi otomatis balik)
   }
 
   function beginEditPath(nodeId){
@@ -4481,14 +5659,184 @@
 
 
   const PORTED_TYPES = ['htb','odp_splitter','odp_jointbox'];
-  const LAN_PORTED_TYPES = ['router','switch'];
+  const LAN_PORTED_TYPES = ['router','switch','hub'];
   function onDeviceTypeChange(){
     const type = document.getElementById('dm-type').value;
     document.getElementById('dm-ports-field').style.display = PORTED_TYPES.includes(type) ? 'flex' : 'none';
     document.getElementById('dm-lanports-field').style.display = LAN_PORTED_TYPES.includes(type) ? 'block' : 'none';
-    document.getElementById('dm-lanports-hint').style.display = LAN_PORTED_TYPES.includes(type) ? 'block' : 'none';
-    const htbHint = document.getElementById('dm-htb-hint');
-    if(htbHint) htbHint.style.display = type==='htb' ? 'block' : 'none';
+    document.getElementById('dm-broken-ports-field').style.display = (PORTED_TYPES.includes(type) || LAN_PORTED_TYPES.includes(type)) ? 'block' : 'none';
+    populateOwnUplinkPortSelect();
+    populateOwnPortStatusGrid();
+  }
+
+  // editingDeviceBrokenPorts: Set nama port (mis. "LAN 3") yang ditandai
+  // rusak pada perangkat yang SEDANG diedit/dibuat. Direset tiap modal dibuka
+  // (lihat openDeviceModal), diisi dari node.broken_ports kalau mode edit.
+  let editingDeviceBrokenPorts = new Set();
+
+  // Widget grid port berwarna dipakai di 3 tempat: pilih "Dari Port Induk",
+  // pilih "Masuk ke Port" (uplink), dan tandai "Port Rusak" milik sendiri.
+  // mode:'select' -> klik pilih SATU port, hasil ditulis ke hiddenInput,
+  //                   port dipakai/rusak jadi disabled (tidak bisa dipilih).
+  // mode:'toggle'  -> klik nyala/matikan status "rusak" pada Set yang
+  //                   dikasih (bisa lebih dari satu port ditandai rusak).
+  function renderPortGrid(containerEl, hiddenInput, labels, occupancy, brokenSet, mode, onToggle){
+    if(!labels.length){
+      containerEl.innerHTML = '<div class="audit-mini">— Belum ada port —</div>';
+      return;
+    }
+    const currentValue = hiddenInput ? (hiddenInput.value || '') : '';
+    containerEl.innerHTML = labels.map(label=>{
+      const key = label.toLowerCase();
+      const isBroken = brokenSet && brokenSet.has(label);
+      const occ = occupancy ? occupancy[key] : null;
+      let cls = 'port-tile port-tile-empty';
+      // 🐛 PERBAIKAN (diminta pengguna): sebelumnya nama pemakai port cuma
+      // ditaruh di atribut "title" (baru muncul kalau mouse hover di layar
+      // komputer) — di HP (layar sentuh) ini TIDAK PERNAH muncul sama
+      // sekali, jadi port yang "Terpakai" cuma kelihatan warna biru polos
+      // tanpa keterangan apa-apa. Sekarang nama pemakainya ditulis
+      // LANGSUNG di dalam kotak port, baris kedua, supaya kelihatan tanpa
+      // perlu klik/hover apa pun.
+      let subLabel = '';
+      if(isBroken){ cls = 'port-tile port-tile-broken'; subLabel = 'Rusak'; }
+      else if(occ){
+        cls = 'port-tile port-tile-used';
+        subLabel = occ.customerName ? occ.customerName : deviceLabel(occ.device);
+      }
+      const isSelected = mode==='select' && currentValue.toLowerCase()===key;
+      if(isSelected) cls += ' port-tile-selected';
+      const disabled = mode==='select' && (isBroken || occ) && !isSelected;
+      return `<button type="button" class="${cls}" data-port-label="${label}" ${disabled?'disabled':''}>
+        <span class="port-tile-name">${label}</span>
+        ${subLabel ? `<span class="port-tile-sub">${subLabel}</span>` : ''}
+      </button>`;
+    }).join('');
+
+    containerEl.querySelectorAll('.port-tile').forEach(tile=>{
+      tile.addEventListener('click', ()=>{
+        const label = tile.getAttribute('data-port-label');
+        if(mode==='select'){
+          if(tile.disabled) return;
+          hiddenInput.value = (hiddenInput.value===label) ? '' : label;
+          renderPortGrid(containerEl, hiddenInput, labels, occupancy, brokenSet, mode, onToggle);
+        } else if(mode==='toggle'){
+          if(brokenSet.has(label)) brokenSet.delete(label); else brokenSet.add(label);
+          if(onToggle) onToggle();
+        }
+      });
+    });
+  }
+
+  // Daftar nama port milik perangkat yang SEDANG diedit sendiri (dipakai
+  // untuk grid rusak & grid uplink) — 1 fungsi supaya labelnya selalu
+  // konsisten di semua tempat (LAN vs FO A/B tergantung jenis perangkat).
+  function ownDevicePortLabels(){
+    const type = document.getElementById('dm-type').value;
+    const isLan = LAN_PORTED_TYPES.includes(type);
+    if(isLan){
+      const n = parseInt(document.getElementById('dm-lanports').value, 10) || 0;
+      const labels = [];
+      for(let i=1;i<=n;i++) labels.push(`LAN ${i}`);
+      return labels;
+    }
+    const a = parseInt(document.getElementById('dm-ports-a').value, 10) || 0;
+    const b = parseInt(document.getElementById('dm-ports-b').value, 10) || 0;
+    const labels = [];
+    for(let i=1;i<=a;i++) labels.push(`FO A-${i}`);
+    for(let i=1;i<=b;i++) labels.push(`FO B-${i}`);
+    return labels;
+  }
+
+  // Grid "Tandai Port Rusak" — port MILIK SENDIRI. Klik toggle rusak/tidak.
+  // Port yang sudah dipakai (uplink masuk / turunan keluar) tetap boleh
+  // ditandai rusak (kasus nyata: port dipakai TAPI fisiknya bermasalah),
+  // makanya di sini TIDAK di-disable seperti grid pilih-port yang lain —
+  // cuma warnanya tetap "terpakai" (biru) kalau belum ditandai rusak, atau
+  // "rusak" (merah) kalau sudah, supaya admin tetap lihat kalau itu port
+  // yang aktif dipakai sebelum menandainya rusak.
+  function populateOwnPortStatusGrid(){
+    const wrap = document.getElementById('dm-broken-ports-field');
+    const grid = document.getElementById('dm-broken-ports-grid');
+    if(!wrap || !grid) return;
+    const labels = ownDevicePortLabels();
+
+    const occupancy = {};
+    if(editingDeviceId){
+      networkNodes.filter(n=>n.parent_id===editingDeviceId && n.id!==editingDeviceId).forEach(s=>{
+        if(!s.parent_port) return;
+        const linkedCust = customers.find(c=>c.node_id===s.id);
+        occupancy[s.parent_port.trim().toLowerCase()] = { device:s, customerName: linkedCust ? linkedCust.name : null };
+      });
+      const me = networkNodes.find(n=>n.id===editingDeviceId);
+      if(me && me.uplink_port) occupancy[me.uplink_port.trim().toLowerCase()] = { device: networkNodes.find(p=>p.id===me.parent_id) || {name:'induk'}, customerName:null };
+    }
+
+    if(!labels.length){ grid.innerHTML = '<div class="audit-mini">— Isi dulu jumlah port di atas —</div>'; return; }
+    grid.innerHTML = labels.map(label=>{
+      const key = label.toLowerCase();
+      const isBroken = editingDeviceBrokenPorts.has(label);
+      const occ = occupancy[key];
+      let cls = 'port-tile port-tile-empty';
+      let subLabel = '';
+      if(isBroken){ cls = 'port-tile port-tile-broken'; subLabel = 'Rusak'; }
+      else if(occ){ cls = 'port-tile port-tile-used'; subLabel = occ.customerName ? occ.customerName : deviceLabel(occ.device); }
+      return `<button type="button" class="${cls}" data-port-label="${label}">
+        <span class="port-tile-name">${label}</span>
+        ${subLabel ? `<span class="port-tile-sub">${subLabel}</span>` : ''}
+      </button>`;
+    }).join('');
+    grid.querySelectorAll('.port-tile').forEach(tile=>{
+      tile.addEventListener('click', ()=>{
+        const label = tile.getAttribute('data-port-label');
+        if(editingDeviceBrokenPorts.has(label)) editingDeviceBrokenPorts.delete(label); else editingDeviceBrokenPorts.add(label);
+        populateOwnPortStatusGrid();
+      });
+    });
+  }
+
+  // Kasus "koneksi 2 arah": "Dari Port Induk" di atas cuma mencatat sisi
+  // INDUK (mis. MikroTik Port 3 keluar). Ini sisi SEBALIKNYA — port di
+  // PERANGKAT INI SENDIRI yang menerima kabel itu (mis. masuk ke Hub Port 1).
+  // Daftar port diambil LIVE dari field "Jumlah Port"/"Jml Port A" perangkat
+  // ini sendiri (bukan dari database — supaya langsung update sambil diketik),
+  // dan port yang sudah dipakai anak Hub ini sendiri otomatis ditandai/dikunci
+  // (satu kabel tidak boleh dianggap dua sambungan berbeda).
+  function populateOwnUplinkPortSelect(desiredValue){
+    const field = document.getElementById('dm-uplink-port-field');
+    const grid = document.getElementById('dm-uplink-port-grid');
+    const hiddenInput = document.getElementById('dm-uplink-port');
+    if(!field || !grid || !hiddenInput) return;
+
+    const parentId = document.getElementById('dm-parent').value;
+    if(!parentId){ field.style.display = 'none'; grid.innerHTML = ''; return; }
+    field.style.display = 'block';
+
+    if(desiredValue !== undefined) hiddenInput.value = desiredValue;
+    const labels = ownDevicePortLabels();
+
+    if(!labels.length){
+      grid.innerHTML = '<div class="audit-mini">— Isi dulu "Jumlah Port" perangkat ini di atas —</div>';
+      return;
+    }
+
+    // Port di PERANGKAT INI yang sudah dipakai ANAK-ANAK-nya sendiri (bukan port
+    // induk di atas) — supaya port uplink tidak bentrok sama port turunan.
+    const occupancy = {};
+    networkNodes
+      .filter(n => n.parent_id === editingDeviceId && n.id !== editingDeviceId)
+      .forEach(s=>{
+        if(!s.parent_port) return;
+        const linkedCust = customers.find(c=>c.node_id===s.id);
+        occupancy[s.parent_port.trim().toLowerCase()] = { device:s, customerName: linkedCust ? linkedCust.name : null };
+      });
+
+    renderPortGrid(grid, hiddenInput, labels, occupancy, editingDeviceBrokenPorts, 'select');
+    if(labels.some(l=>l.toLowerCase()===(hiddenInput.value||'').toLowerCase())){
+      // nilai valid, biarkan
+    } else {
+      hiddenInput.value = '';
+    }
   }
 
   // Kalau "Interface MikroTik" diisi, 2 field trafik manual dikunci (bukan
@@ -4500,21 +5848,54 @@
     document.getElementById('dm-traffic-up').disabled = filled;
   }
 
-  function populateParentPortSelect(){
+  function populateParentPortSelect(desiredValue){
     const parentId = document.getElementById('dm-parent').value;
-    const dl = document.getElementById('dm-parent-port-options');
-    if(!dl) return;
+    const grid = document.getElementById('dm-parent-port-grid');
+    const hiddenInput = document.getElementById('dm-parent-port');
+    if(!grid || !hiddenInput) return;
+    if(desiredValue !== undefined) hiddenInput.value = desiredValue;
+
     const parent = networkNodes.find(n=>n.id===parentId);
-    if(!parent){ dl.innerHTML = ''; return; }
-    let options = [];
-    if(LAN_PORTED_TYPES.includes(parent.type) && (parent.ports_a||0) > 0){
-      for(let i=1;i<=parent.ports_a;i++) options.push(`LAN ${i}`);
-    } else {
-      if((parent.ports_a||0) > 0) for(let i=1;i<=parent.ports_a;i++) options.push(`FO A-${i}`);
-      if((parent.ports_b||0) > 0) for(let i=1;i<=parent.ports_b;i++) options.push(`FO B-${i}`);
+    if(!parent){
+      grid.innerHTML = '<div class="audit-mini">— Pilih induk dulu —</div>';
+      hiddenInput.value = '';
+      return;
     }
-    if(!options.length) options = ['LAN 1','LAN 2','LAN 3','LAN 4','LAN 5','LAN 6','LAN 7','LAN 8'];
-    dl.innerHTML = options.map(o=>`<option value="${o}">`).join('');
+
+    let labels = [];
+    if(LAN_PORTED_TYPES.includes(parent.type) && (parent.ports_a||0) > 0){
+      for(let i=1;i<=parent.ports_a;i++) labels.push(`LAN ${i}`);
+    } else {
+      if((parent.ports_a||0) > 0) for(let i=1;i<=parent.ports_a;i++) labels.push(`FO A-${i}`);
+      if((parent.ports_b||0) > 0) for(let i=1;i<=parent.ports_b;i++) labels.push(`FO B-${i}`);
+    }
+
+    if(!labels.length){
+      grid.innerHTML = '<div class="audit-mini">— Induk ini belum diisi "Jumlah Port", kosongkan atau lengkapi dulu datanya —</div>';
+      hiddenInput.value = '';
+      return;
+    }
+
+    // Siapa yang menempati tiap port — dicek dari SEMUA anak si induk yang sama
+    // (kecuali perangkat yang sedang diedit sendiri), plus nama pelanggan kalau
+    // perangkat penempatnya langsung melayani satu pelanggan. Ini yang bikin
+    // kelihatan jelas "diisi oleh siapa/apa", bukan sekadar tebak-tebak nomor port.
+    const occupancy = {};
+    networkNodes
+      .filter(n => n.parent_id === parentId && n.id !== editingDeviceId)
+      .forEach(s=>{
+        if(!s.parent_port) return;
+        const linkedCust = customers.find(c=>c.node_id===s.id);
+        occupancy[s.parent_port.trim().toLowerCase()] = { device:s, customerName: linkedCust ? linkedCust.name : null };
+      });
+
+    // Port rusak di sisi INDUK (ditandai lewat "Tandai Port Rusak" waktu
+    // induk itu sendiri diedit) — ini bagian dari "koneksi 2 arah" juga:
+    // kalau induknya bilang Port 3 rusak, semua calon anak yang mau nyambung
+    // ke situ HARUS lihat merah, bukan cuma pas induknya sendiri dibuka.
+    const parentBroken = new Set(parent.broken_ports || []);
+
+    renderPortGrid(grid, hiddenInput, labels, occupancy, parentBroken, 'select');
   }
 
 
@@ -4533,9 +5914,10 @@
     el.innerHTML = '';
 
     function buildNode(n, depth){
+      ensureNodeChildrenIndex();
       const meta = deviceTypeMeta[n.type] || { label:n.type||'—', icon:'<circle cx="12" cy="12" r="8"/>' };
       const ip = deviceIp(n);
-      const children = scoped.filter(c => c.parent_id === n.id);
+      const children = _childrenByParentIdIdx.get(n.id) || [];
       const wrap = document.createElement('div');
       wrap.className = 'device-depth-wrap';
       wrap.innerHTML = `
@@ -4611,12 +5993,34 @@
         html += `<option value="${currentValue}">${currentValue} (tersimpan, tidak terlihat di router saat ini)</option>`;
       }
     }
+    // 🐛 FIX item 4 ("dropdown selalu keluar-masuk berkedip cepat"): root cause-nya
+    // site_ether_interfaces disinkron ulang oleh agent tiap ~20 detik (siklus live),
+    // memicu event Realtime UPDATE walau isinya PERSIS SAMA. Sebelumnya select ini
+    // dibangun ulang (innerHTML) setiap event masuk → dropdown kedip terus-menerus
+    // selama modal terbuka. Sekarang HTML dibandingkan dulu, cuma ditulis ulang
+    // kalau memang ada perubahan nyata (interface baru muncul/hilang/status ganti).
+    if(sel.dataset.lastHtml === html){
+      sel.value = currentValue || '';
+      return;
+    }
+    sel.dataset.lastHtml = html;
     sel.innerHTML = html;
     sel.value = currentValue || '';
   }
-  function populateDeviceParentSelect(siteId, excludeId){
+  function populateDeviceParentSelect(siteId, excludeId, preserveParentId){
     const sel = document.getElementById('dm-parent');
-    const candidates = networkNodes.filter(n => n.site_id===siteId && n.id!==excludeId);
+    // Item 3: node yang sudah terhubung LANGSUNG ke pelanggan (customers.node_id)
+    // adalah titik akhir hierarki jaringan — tidak boleh dijadikan induk untuk
+    // perangkat lain (pelanggan tidak punya "anak" di bawahnya, dia paling bawah).
+    const customerNodeIds = new Set(customers.filter(c=>c.node_id).map(c=>c.node_id));
+    let candidates = networkNodes.filter(n => n.site_id===siteId && n.id!==excludeId && !customerNodeIds.has(n.id));
+    // Jaga-jaga data lama: kalau parent yang TERSIMPAN saat ini justru node
+    // yang sekarang difilter (mis. dulu sempat ke-link pelanggan lalu berubah),
+    // tetap tampilkan supaya nilai lama tidak diam-diam berubah saat disimpan ulang.
+    if(preserveParentId && !candidates.some(n=>n.id===preserveParentId)){
+      const preserved = networkNodes.find(n=>n.id===preserveParentId);
+      if(preserved) candidates = [preserved, ...candidates];
+    }
     sel.innerHTML = '<option value="">— Tidak ada (perangkat akar) —</option>' +
       candidates.map(n=>`<option value="${n.id}">${deviceLabel(n)} (${deviceTypeLabel(n.type)})</option>`).join('');
   }
@@ -4682,6 +6086,7 @@
     editingDeviceId = mode==='edit' ? refId : null;
     const presetParentId = mode==='create' ? (refId || '') : null;
     const node = mode==='edit' ? networkNodes.find(n=>n.id===refId) : null;
+    editingDeviceBrokenPorts = new Set(node && Array.isArray(node.broken_ports) ? node.broken_ports : []);
 
     document.getElementById('device-modal-title').textContent = mode==='edit' ? 'Edit Perangkat' : 'Tambah Perangkat';
     document.getElementById('dm-name').value = node ? deviceLabel(node) : '';
@@ -4691,7 +6096,6 @@
     document.getElementById('dm-ports-a').value = node ? (node.ports_a||0) : 0;
     document.getElementById('dm-ports-b').value = node ? (node.ports_b||0) : 0;
     document.getElementById('dm-lanports').value = node ? (node.ports_a||0) : 0;
-    document.getElementById('dm-parent-port').value = node ? (node.parent_port||'') : '';
     document.getElementById('dm-traffic-down').value = node && node.traffic_down_mbps!=null ? node.traffic_down_mbps : '';
     document.getElementById('dm-traffic-up').value = node && node.traffic_up_mbps!=null ? node.traffic_up_mbps : '';
     const initialSiteId = node ? node.site_id : (currentSite!=='all' ? currentSite : (sites[0] && sites[0].id));
@@ -4710,17 +6114,19 @@
 
     const siteId = node ? node.site_id : (currentSite!=='all' ? currentSite : (sites[0] && sites[0].id));
     populateDeviceSiteSelect(siteId);
-    populateDeviceParentSelect(siteId, node ? node.id : null);
+    populateDeviceParentSelect(siteId, node ? node.id : null, node ? node.parent_id : null);
     populateDeviceCustomerSelect(siteId, node ? node.id : null);
     if(node && node.parent_id) document.getElementById('dm-parent').value = node.parent_id;
     if(!node && presetParentId) document.getElementById('dm-parent').value = presetParentId;
-    populateParentPortSelect();
+    populateParentPortSelect(node ? (node.parent_port||'') : '');
+    populateOwnUplinkPortSelect(node ? (node.uplink_port||'') : '');
 
     document.getElementById('dm-site').onchange = ()=>{
       const newSiteId = document.getElementById('dm-site').value;
-      populateDeviceParentSelect(newSiteId, node ? node.id : null);
+      populateDeviceParentSelect(newSiteId, node ? node.id : null, node ? node.parent_id : null);
       populateDeviceCustomerSelect(newSiteId, node ? node.id : null);
       populateParentPortSelect();
+      populateOwnUplinkPortSelect();
       populateEtherInterfaceSelect(newSiteId, ''); // ganti server = interface lama tidak relevan lagi
       onDeviceMikrotikInterfaceChange();
     };
@@ -4744,6 +6150,7 @@
       : (parseInt(document.getElementById('dm-ports-a').value, 10) || 0);
     const portsB = parseInt(document.getElementById('dm-ports-b').value, 10) || 0;
     const parentPort = document.getElementById('dm-parent-port').value.trim();
+    const uplinkPort = document.getElementById('dm-uplink-port').value.trim();
     const trafficDownRaw = document.getElementById('dm-traffic-down').value;
     const trafficUpRaw = document.getElementById('dm-traffic-up').value;
     const mikrotikInterface = document.getElementById('dm-mikrotik-interface').value.trim();
@@ -4753,6 +6160,19 @@
 
     if(!name){ showToast('Nama perangkat wajib diisi'); return; }
     if(!siteId){ showToast('Pilih server terlebih dahulu'); return; }
+
+    if(parentId && parentPort){
+      const parentNode = networkNodes.find(n=>n.id===parentId);
+      const parentBroken = new Set((parentNode && parentNode.broken_ports) || []);
+      if(parentBroken.has(parentPort)){
+        showToast(`Port "${parentPort}" di perangkat induk sudah ditandai RUSAK — pilih port lain.`);
+        return;
+      }
+    }
+    if(uplinkPort && editingDeviceBrokenPorts.has(uplinkPort)){
+      showToast(`Port "${uplinkPort}" di perangkat ini sendiri sudah ditandai RUSAK — pilih port lain untuk uplink.`);
+      return;
+    }
 
     // Kasus "belum ada validasi port": satu port di induk yang sama tidak
     // boleh dipakai dua perangkat anak sekaligus — dicek terhadap SEMUA
@@ -4768,6 +6188,19 @@
         return;
       }
     }
+    // Sama seperti validasi di atas, tapi untuk sisi uplink-nya sendiri: port
+    // yang dipilih di "Masuk ke Port Berapa di Perangkat Ini" tidak boleh
+    // bentrok dengan port yang sudah dipakai anak perangkat ini sendiri.
+    if(editingDeviceId && uplinkPort){
+      const ownConflict = networkNodes.find(n =>
+        n.parent_id === editingDeviceId &&
+        (n.parent_port||'').trim().toLowerCase() === uplinkPort.toLowerCase()
+      );
+      if(ownConflict){
+        showToast(`Port "${uplinkPort}" di perangkat ini sudah dipakai turunannya sendiri ("${deviceLabel(ownConflict)}") — pilih port lain untuk uplink.`);
+        return;
+      }
+    }
 
     const btn = document.getElementById('dm-save-btn');
     btn.disabled = true; btn.textContent = 'Menyimpan…';
@@ -4776,7 +6209,9 @@
         site_id: siteId, node_type: type, parent_id: parentId, name,
         locked, ports_a: portsA, ports_b: portsB,
         parent_port: parentPort || null,
+        uplink_port: uplinkPort || null,
         mikrotik_interface: mikrotikInterface || null,
+        broken_ports: Array.from(editingDeviceBrokenPorts),
       };
       if(mikrotikInterface){
         // Interface diisi -> trafik jadi urusan agent (siklus live). Sengaja TIDAK
@@ -5881,6 +7316,15 @@
   let ticketFilter = 'all';
   let billingFilter = 'all';
   let topologyFilter = 'all';
+  // Mode Sederhana (default AKTIF): rantai perangkat pass-through murni (1 anak,
+  // tanpa pelanggan nempel, bukan percabangan) dilipat jadi 1 garis panjang —
+  // supaya yang tampil cuma titik yang benar-benar "berarti" (server, percabangan,
+  // titik pelanggan). Rekomendasi eksplisit dari analisis 4-sudut-pandang
+  // (teknisi awam/owner awam/senior desainer/web dev) 19-20 Jul 2026: rasio
+  // 15 perangkat untuk 10 pelanggan itu information overload, bukan detail
+  // yang berguna. Mode Detail (manual toggle) tetap tersedia utuh untuk
+  // teknisi yang mau telusuri kabel fisik satu-satu.
+  let topologySimpleMode = true;
   let editingInventoryId = null;
   let inventoryFilter = 'all';
   function technicianName(id){ const t = technicians.find(t=>t.id===id); return t ? t.name : null; }
