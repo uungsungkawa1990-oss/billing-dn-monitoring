@@ -432,11 +432,10 @@
   .topo-node-box.type-router rect, .topo-node-box.type-hub rect{ fill:var(--wire-blue-soft); }
   .topo-node-box text.topo-title{ font-family:var(--body); font-size:11px; font-weight:600; fill:var(--ink); }
   .topo-node-box text.topo-sub{ font-family:var(--mono); font-size:9.5px; fill:var(--ink-3); }
-  .topo-link{ stroke:var(--line-2); stroke-width:1.6; fill:none; }
-  .topo-link-active{ stroke:var(--wire-blue); stroke-width:2; fill:none; stroke-dasharray:5,4; animation: topo-flow 1s linear infinite; }
+  .topo-link{ stroke:var(--line-2); stroke-width:3; fill:none; }
+  .topo-link-active{ stroke:var(--wire-blue); stroke-width:3.5; fill:none; stroke-dasharray:7,5; animation: topo-flow 1s linear infinite; }
   @keyframes topo-flow{ to{ stroke-dashoffset:-18; } }
   .topo-map-link-active{ stroke-dasharray:6,6 !important; animation: topo-flow 1s linear infinite; }
-  .topo-traffic-label{ font-family:var(--mono); font-size:9.5px; fill:var(--wire-blue); }
   .topo-node-box.health-ok rect{ stroke:var(--on); stroke-width:1.8; }
   .topo-node-box.health-warn rect{ stroke:var(--iso); stroke-width:2; }
   .topo-node-box.health-bad rect{ stroke:var(--off); stroke-width:2; }
@@ -521,6 +520,19 @@
       letter-spacing:.3px; flex-shrink:0;
     }
     .device-children{ margin-left:12px; padding-left:8px; }
+
+    /* 🐛 FIX mobile Pelanggan: .customers-table{ min-width:640px } di atas
+       cuma dimaksudkan untuk DESKTOP (supaya nama/username panjang tidak
+       terpotong sebelum ada overflow-x:auto). Kalau dibiarkan aktif di mode
+       stacked-card mobile ini, tabel tetap "lebar" 640px di layar HP yang
+       cuma ~360-400px — nilainya (nama, username, dst) jadi terdorong keluar
+       layar ke kanan karena justify-content:space-between, sementara yang
+       kelihatan cuma labelnya. Reset di sini supaya ikut collapse 100% lebar
+       seperti tabel lain yang sudah benar di mobile.
+    */
+    .customers-table{ min-width:0; }
+    .sticky-action-col{ position:static; box-shadow:none; }
+    .table-wrap td.sticky-action-col{ justify-content:flex-start; }
   }
 
   @media (max-width: 480px){
@@ -853,18 +865,11 @@
         </div>
         <div class="device-toolbar">
           <button class="btn btn-primary" style="width:auto; padding:9px 16px;" onclick="openDeviceModal('create')">+ Tambah Perangkat</button>
-          <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-            <span class="hint" id="device-count-hint">—</span>
-            <div style="display:flex; gap:6px;">
-              <button class="chip on" data-view="list" onclick="switchDeviceView('list', this)">Daftar</button>
-              <button class="chip" data-view="topology" onclick="switchDeviceView('topology', this)">Topologi</button>
-            </div>
-          </div>
+          <span class="hint" id="device-count-hint">—</span>
         </div>
         <div class="device-tree" id="devices-tree">
           <div class="empty-note">Memuat perangkat…</div>
         </div>
-        <div class="topology-wrap" id="devices-topology" style="display:none;"></div>
       </div>
 
       <!-- PAGE: NETWORK TOPOLOGY -->
@@ -1698,9 +1703,9 @@
           <option value="htb">HTB / Switch (Estafet-Converter)</option>
           <option value="odp_splitter">ODP — Passive Splitter (Tiang)</option>
           <option value="odp_jointbox">ODP — Joint Box / Distribusi (Multi-Core)</option>
-          <option value="hub">Hub (lama)</option>
-          <option value="splitter">Splitter (lama)</option>
+          <option value="customer_router">Router / Access Point (Pelanggan)</option>
         </select>
+        <div class="audit-mini" id="dm-lanports-hint" style="display:none; margin-top:4px;">Untuk perangkat multi-port (router/switch) yang dipakai beberapa pelanggan sekaligus — tentukan jumlah port di bawah, supaya tiap pelanggan/perangkat anak bisa dipasangkan ke nomor port yang jelas lewat "Dari Port Induk".</div>
         <div class="audit-mini" id="dm-htb-hint" style="display:none; margin-top:4px;">HTB BOLEH berdiri sendiri sebagai titik akhir ke satu pelanggan — TIDAK wajib selalu berpasangan pemancar+penerima. Hubungkan langsung ke pelanggan lewat kolom "Pelanggan Terhubung" di bawah; tambahkan HTB kedua hanya kalau memang ada unit fisik relainya di lokasi lain.</div>
       </div>
       <div class="field">
@@ -1719,6 +1724,15 @@
           <label>Jml Port B</label>
           <input type="number" id="dm-ports-b" min="0" value="0">
         </div>
+      </div>
+      <div class="field" id="dm-lanports-field" style="display:none;">
+        <label>Jumlah Port</label>
+        <input type="number" id="dm-lanports" min="0" list="dm-lanports-presets" placeholder="mis. 6, 12, 24">
+        <datalist id="dm-lanports-presets">
+          <option value="4"><option value="6"><option value="8"><option value="12">
+          <option value="16"><option value="24"><option value="48">
+        </datalist>
+        <div class="audit-mini" style="margin-top:4px;">Berapa banyak port fisik di perangkat ini (mis. hub/switch 6, 12, atau 24 port) — dipakai untuk daftar pilihan "Dari Port Induk" saat menghubungkan beberapa pelanggan/perangkat anak ke port yang berbeda-beda di perangkat ini.</div>
       </div>
       <div class="field">
         <label>Induk (Parent) — opsional</label>
@@ -3677,6 +3691,7 @@
     htb:          { label:'HTB / Switch (Estafet-Converter)', color:'#a855f7', icon:'<rect x="4" y="7" width="16" height="10" rx="2"/><path d="M8 7V5M16 7V5M8 19v-2M16 19v-2"/>' },
     odp_splitter: { label:'ODP — Passive Splitter (Tiang)', color:'#16a34a', icon:'<path d="M4 6h4l4 6-4 6H4M20 6h-4l-4 6 4 6h4"/>' },
     odp_jointbox: { label:'ODP — Joint Box / Distribusi', color:'#dc2626', icon:'<rect x="5" y="4" width="14" height="16" rx="2"/><path d="M9 8h6M9 12h6M9 16h6"/>' },
+    customer_router: { label:'Router / Access Point (Pelanggan)', color:'#0d9488', icon:'<rect x="3" y="10" width="18" height="7" rx="2"/><path d="M7 10V7a2 2 0 012-2h6a2 2 0 012 2v3"/><circle cx="8" cy="13.5" r="0.8"/><circle cx="12" cy="13.5" r="0.8"/>' },
   };
   function deviceTypeLabel(t){ return (deviceTypeMeta[t] && deviceTypeMeta[t].label) || t || '—'; }
 
@@ -3697,16 +3712,6 @@
     if(link && link.cable_length_m!=null) return `${Math.round(link.cable_length_m)}m (manual)`;
     if(points.length >= 2) return `${Math.round(computePathLengthMeters(points))}m (perkiraan GPS)`;
     return '—';
-  }
-
-  let deviceViewMode = 'list';
-  function switchDeviceView(mode, btn){
-    deviceViewMode = mode;
-    document.querySelectorAll('.device-toolbar .chip').forEach(c=>c.classList.remove('on'));
-    btn.classList.add('on');
-    document.getElementById('devices-tree').style.display = mode==='list' ? '' : 'none';
-    document.getElementById('devices-topology').style.display = mode==='topology' ? '' : 'none';
-    if(mode==='topology') renderDevicesTopology();
   }
 
   // Susun node per-site jadi level (BFS multi-root) supaya bisa digambar sebagai diagram SVG.
@@ -3763,127 +3768,9 @@
       ? { down: node.traffic_down_mbps, up: node.traffic_up_mbps } : null;
   }
 
-  function renderDevicesTopology(){
-    const el = document.getElementById('devices-topology'); if(!el) return;
-    const scoped = networkNodes.filter(inSite);
-    const relevantSites = currentSite==='all' ? sites : sites.filter(s=>s.id===currentSite);
-    el.innerHTML = '';
-
-    if(!scoped.length){
-      el.innerHTML = '<div class="empty-note">Belum ada perangkat untuk digambarkan sebagai topologi.</div>';
-      return;
-    }
-
-    const BOX_W = 148, BOX_H = 56, HGAP = 26, VGAP = 66, PAD = 26;
-    const NS = 'http://www.w3.org/2000/svg';
-
-    relevantSites.forEach(site=>{
-      const siteNodes = scoped.filter(n=>n.site_id===site.id);
-      if(!siteNodes.length) return;
-
-      const levels = computeTopoLevels(siteNodes);
-      const maxPerLevel = Math.max(...levels.map(l=>l.length));
-      const svgW = Math.max(maxPerLevel * (BOX_W+HGAP) + PAD, BOX_W + PAD*2);
-      const svgH = levels.length * (BOX_H+VGAP) + PAD;
-
-      const pos = {}; // node.id -> {x,y}
-      levels.forEach((levelNodes, li)=>{
-        const rowW = levelNodes.length * (BOX_W+HGAP) - HGAP;
-        const startX = (svgW - rowW) / 2;
-        levelNodes.forEach((n, i)=>{
-          pos[n.id] = { x: startX + i*(BOX_W+HGAP), y: PAD + li*(BOX_H+VGAP) };
-        });
-      });
-
-      const block = document.createElement('div');
-      block.className = 'topo-site-block';
-      block.innerHTML = `<div class="dsg-head">${site.name}<span class="muted">${siteNodes.length} perangkat</span></div>`;
-      const scrollWrap = document.createElement('div');
-      scrollWrap.className = 'topo-scroll';
-
-      const svg = document.createElementNS(NS, 'svg');
-      svg.setAttribute('width', svgW);
-      svg.setAttribute('height', svgH);
-      svg.setAttribute('viewBox', `0 0 ${svgW} ${svgH}`);
-
-      // Garis penghubung parent -> child (digambar dulu supaya berada di belakang kotak node)
-      siteNodes.forEach(n=>{
-        if(!n.parent_id || !pos[n.parent_id]) return;
-        const p = pos[n.parent_id], c = pos[n.id];
-        const x1 = p.x + BOX_W/2, y1 = p.y + BOX_H;
-        const x2 = c.x + BOX_W/2, y2 = c.y;
-        const midY = (y1+y2)/2;
-        const path = document.createElementNS(NS, 'path');
-        path.setAttribute('class', 'topo-link');
-        path.setAttribute('d', `M${x1},${y1} C${x1},${midY} ${x2},${midY} ${x2},${y2}`);
-        svg.appendChild(path);
-
-        // Trafik di garis jalur — otomatis: node router (Interface MikroTik terisi)
-        // dibaca langsung dari agent, node pasif (HTB/splitter/hub/ODP) dihitung
-        // dari jumlah trafik semua pelanggan di bawahnya. Label hanya muncul
-        // kalau memang ada datanya (bukan dipenuhi "—" untuk jalur tanpa data).
-        const traf = getNodeTrafficRollup(n, siteNodes);
-        if(traf){
-          const down = traf.down!=null ? traf.down.toFixed(1) : '—';
-          const up = traf.up!=null ? traf.up.toFixed(1) : '—';
-          const label = document.createElementNS(NS, 'text');
-          label.setAttribute('class', 'topo-traffic-label');
-          label.setAttribute('x', (x1+x2)/2);
-          label.setAttribute('y', midY - 4);
-          label.setAttribute('text-anchor', 'middle');
-          label.textContent = `↓${down} / ↑${up} Mbps`;
-          svg.appendChild(label);
-          if((traf.down||0) > 0 || (traf.up||0) > 0){
-            path.setAttribute('class', 'topo-link topo-link-active');
-          }
-        }
-      });
-
-      siteNodes.forEach(n=>{
-        const p = pos[n.id]; if(!p) return;
-        const custCount = customers.filter(c=>c.node_id===n.id).length;
-        const ip = deviceIp(n);
-        const g = document.createElementNS(NS, 'g');
-        g.setAttribute('class', 'topo-node-box type-'+(n.type||''));
-        g.setAttribute('transform', `translate(${p.x},${p.y})`);
-        g.style.cursor = 'pointer';
-        g.addEventListener('click', ()=>openDeviceModal('edit', n.id));
-
-        const rect = document.createElementNS(NS, 'rect');
-        rect.setAttribute('width', BOX_W); rect.setAttribute('height', BOX_H); rect.setAttribute('rx', 8);
-        g.appendChild(rect);
-
-        const title = document.createElementNS(NS, 'text');
-        title.setAttribute('class', 'topo-title'); title.setAttribute('x', 10); title.setAttribute('y', 21);
-        title.textContent = deviceLabel(n).length > 20 ? deviceLabel(n).slice(0,19)+'…' : deviceLabel(n);
-        g.appendChild(title);
-
-        const sub = document.createElementNS(NS, 'text');
-        sub.setAttribute('class', 'topo-sub'); sub.setAttribute('x', 10); sub.setAttribute('y', 36);
-        sub.textContent = deviceTypeLabel(n.type) + (ip ? ' · '+ip : '');
-        g.appendChild(sub);
-
-        const sub2 = document.createElementNS(NS, 'text');
-        sub2.setAttribute('class', 'topo-sub'); sub2.setAttribute('x', 10); sub2.setAttribute('y', 48);
-        sub2.textContent = custCount > 0 ? custCount+' pelanggan terhubung' : 'tidak ada pelanggan';
-        g.appendChild(sub2);
-
-        svg.appendChild(g);
-      });
-
-      scrollWrap.appendChild(svg);
-      block.appendChild(scrollWrap);
-      el.appendChild(block);
-    });
-
-    if(!el.children.length){
-      el.innerHTML = '<div class="empty-note">Tidak ada perangkat untuk server yang dipilih.</div>';
-    }
-  }
-
-  // ---------- NETWORK TOPOLOGY (monitoring, terpisah dari Device Manager) ----------
-  // Kesehatan node dihitung dari pelanggan yang terhubung LANGSUNG ke node itu (customers.node_id),
-  // sama seperti custCount di renderDevicesTopology — bukan agregasi rekursif ke anak node.
+  // ---------- NETWORK TOPOLOGY (monitoring) ----------
+  // Kesehatan node dihitung dari pelanggan yang terhubung LANGSUNG ke node itu (customers.node_id)
+  // — bukan agregasi rekursif ke anak node.
   function nodeHealth(nodeId){
     const custs = customers.filter(c=>c.node_id===nodeId);
     const total = custs.length;
@@ -4012,33 +3899,22 @@
         const path = document.createElementNS(NS, 'path');
         path.setAttribute('class', 'topo-link');
         path.setAttribute('d', `M${x1},${y1} C${x1},${midY} ${x2},${midY} ${x2},${y2}`);
+
+        // Trafik ditampilkan lewat tooltip HOVER (native SVG <title>), BUKAN teks
+        // permanen di garis — teks permanen menumpuk dan tidak terbaca begitu ada
+        // banyak percabangan/pelanggan (lihat catatan). Warna+animasi garis (biru
+        // putus-putus mengalir vs abu-abu statis) sudah cukup menunjukkan mana yang
+        // ada trafiknya sekilas pandang; angka presisinya tersedia saat hover/tap.
+        const traf = getNodeTrafficRollup(n, siteNodes);
+        const pathTitle = document.createElementNS(NS, 'title');
+        pathTitle.textContent = traf
+          ? `${deviceLabel(n)} — ↓${traf.down!=null?traf.down.toFixed(1):'—'} / ↑${traf.up!=null?traf.up.toFixed(1):'—'} Mbps`
+          : `${deviceLabel(n)} — tidak ada data trafik`;
+        path.appendChild(pathTitle);
         svg.appendChild(path);
 
-        // Trafik di garis jalur (sama seperti halaman Perangkat > Topologi) —
-        // otomatis dari getNodeTrafficRollup, cuma muncul kalau memang ada datanya.
-        const traf = getNodeTrafficRollup(n, siteNodes);
-        if(traf){
-          const down = traf.down!=null ? traf.down.toFixed(1) : '—';
-          const up = traf.up!=null ? traf.up.toFixed(1) : '—';
-          // Kasus label bertumpukan: kalau beberapa sibling (anak dari parent
-          // yang sama) posisinya berdekatan, selang-selingkan tinggi labelnya
-          // supaya teksnya tidak saling tabrak.
-          const siblings = siteNodes.filter(x=>x.parent_id===n.parent_id);
-          const siblingIdx = siblings.findIndex(x=>x.id===n.id);
-          const yOffset = (siblingIdx % 2 === 0) ? -4 : -14;
-          const label = document.createElementNS(NS, 'text');
-          label.setAttribute('class', 'topo-traffic-label');
-          label.setAttribute('x', (x1+x2)/2);
-          label.setAttribute('y', midY + yOffset);
-          label.setAttribute('text-anchor', 'middle');
-          label.textContent = `↓${down}/↑${up}`;
-          svg.appendChild(label);
-
-          // Kasus #5: animasi garis "mengalir" kalau ada trafik aktif (>0),
-          // meniru visual peta monitoring WiFi biasa (garis hidup vs mati).
-          if((traf.down||0) > 0 || (traf.up||0) > 0){
-            path.setAttribute('class', 'topo-link topo-link-active');
-          }
+        if(traf && ((traf.down||0) > 0 || (traf.up||0) > 0)){
+          path.setAttribute('class', 'topo-link topo-link-active');
         }
       });
 
@@ -4605,9 +4481,12 @@
 
 
   const PORTED_TYPES = ['htb','odp_splitter','odp_jointbox'];
+  const LAN_PORTED_TYPES = ['router','switch'];
   function onDeviceTypeChange(){
     const type = document.getElementById('dm-type').value;
     document.getElementById('dm-ports-field').style.display = PORTED_TYPES.includes(type) ? 'flex' : 'none';
+    document.getElementById('dm-lanports-field').style.display = LAN_PORTED_TYPES.includes(type) ? 'block' : 'none';
+    document.getElementById('dm-lanports-hint').style.display = LAN_PORTED_TYPES.includes(type) ? 'block' : 'none';
     const htbHint = document.getElementById('dm-htb-hint');
     if(htbHint) htbHint.style.display = type==='htb' ? 'block' : 'none';
   }
@@ -4628,8 +4507,12 @@
     const parent = networkNodes.find(n=>n.id===parentId);
     if(!parent){ dl.innerHTML = ''; return; }
     let options = [];
-    if((parent.ports_a||0) > 0) for(let i=1;i<=parent.ports_a;i++) options.push(`FO A-${i}`);
-    if((parent.ports_b||0) > 0) for(let i=1;i<=parent.ports_b;i++) options.push(`FO B-${i}`);
+    if(LAN_PORTED_TYPES.includes(parent.type) && (parent.ports_a||0) > 0){
+      for(let i=1;i<=parent.ports_a;i++) options.push(`LAN ${i}`);
+    } else {
+      if((parent.ports_a||0) > 0) for(let i=1;i<=parent.ports_a;i++) options.push(`FO A-${i}`);
+      if((parent.ports_b||0) > 0) for(let i=1;i<=parent.ports_b;i++) options.push(`FO B-${i}`);
+    }
     if(!options.length) options = ['LAN 1','LAN 2','LAN 3','LAN 4','LAN 5','LAN 6','LAN 7','LAN 8'];
     dl.innerHTML = options.map(o=>`<option value="${o}">`).join('');
   }
@@ -4701,7 +4584,6 @@
     if(!el.children.length){
       el.innerHTML = '<div class="empty-note">Tidak ada perangkat untuk server yang dipilih.</div>';
     }
-    if(deviceViewMode==='topology') renderDevicesTopology();
   }
 
   function populateDeviceSiteSelect(selectedSiteId){
@@ -4808,6 +4690,7 @@
     document.getElementById('dm-locked').value = node && node.locked ? '1' : '0';
     document.getElementById('dm-ports-a').value = node ? (node.ports_a||0) : 0;
     document.getElementById('dm-ports-b').value = node ? (node.ports_b||0) : 0;
+    document.getElementById('dm-lanports').value = node ? (node.ports_a||0) : 0;
     document.getElementById('dm-parent-port').value = node ? (node.parent_port||'') : '';
     document.getElementById('dm-traffic-down').value = node && node.traffic_down_mbps!=null ? node.traffic_down_mbps : '';
     document.getElementById('dm-traffic-up').value = node && node.traffic_up_mbps!=null ? node.traffic_up_mbps : '';
@@ -4856,7 +4739,9 @@
     const parentId = document.getElementById('dm-parent').value || null;
     const ip = document.getElementById('dm-ip').value.trim();
     const locked = document.getElementById('dm-locked').value === '1';
-    const portsA = parseInt(document.getElementById('dm-ports-a').value, 10) || 0;
+    const portsA = LAN_PORTED_TYPES.includes(type)
+      ? (parseInt(document.getElementById('dm-lanports').value, 10) || 0)
+      : (parseInt(document.getElementById('dm-ports-a').value, 10) || 0);
     const portsB = parseInt(document.getElementById('dm-ports-b').value, 10) || 0;
     const parentPort = document.getElementById('dm-parent-port').value.trim();
     const trafficDownRaw = document.getElementById('dm-traffic-down').value;
