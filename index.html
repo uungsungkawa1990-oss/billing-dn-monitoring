@@ -523,8 +523,8 @@
     .modal-box{ max-width:100%; }
   }
 </style>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/3.6.2/maplibre-gl.min.css">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/3.6.2/maplibre-gl.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@3.6.2/dist/maplibre-gl.css">
+<script src="https://cdn.jsdelivr.net/npm/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
 </head>
 <body>
 
@@ -2800,7 +2800,7 @@
     const mapEl = document.getElementById('customer-map');
     if(!mapEl || customerMapInstance) return;
     if(typeof maplibregl==='undefined'){
-      mapEl.innerHTML = '<div class="empty-note" style="color:var(--off); padding:16px;">Library MapLibre GL gagal dimuat dari cdnjs.cloudflare.com — cek koneksi internet atau apakah domain ini diblokir (adblocker/firewall/CSP).</div>';
+      mapEl.innerHTML = '<div class="empty-note" style="color:var(--off); padding:16px;">Library MapLibre GL gagal dimuat dari cdn.jsdelivr.net — cek koneksi internet atau apakah domain ini diblokir (adblocker/firewall/CSP).</div>';
       return;
     }
 
@@ -4169,7 +4169,7 @@
     const mapEl = document.getElementById('topology-map');
     if(!mapEl || topologyMapInstance) return;
     if(typeof maplibregl==='undefined'){
-      mapEl.innerHTML = '<div class="empty-note" style="color:var(--off); padding:16px;">Library MapLibre GL gagal dimuat dari cdnjs.cloudflare.com — cek koneksi internet atau apakah domain ini diblokir (adblocker/firewall/CSP).</div>';
+      mapEl.innerHTML = '<div class="empty-note" style="color:var(--off); padding:16px;">Library MapLibre GL gagal dimuat dari cdn.jsdelivr.net — cek koneksi internet atau apakah domain ini diblokir (adblocker/firewall/CSP).</div>';
       return;
     }
 
