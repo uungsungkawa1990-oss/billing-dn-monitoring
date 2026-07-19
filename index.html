@@ -273,6 +273,42 @@
     font-size:13px; background:var(--surface); color:var(--ink); box-shadow:var(--shadow-1);
   }
   .topology-marker{ background:transparent; border:none; }
+  #topology-map{ position:relative; }
+  .topology-search-box{ position:absolute; top:10px; left:10px; z-index:5; }
+  .topo-livebox{ position:absolute; top:52px; left:10px; z-index:5; }
+  .topo-map-layer-toggle{
+    position:absolute; top:10px; right:10px; z-index:5; display:flex; gap:4px;
+    background:rgba(255,255,255,.92); padding:4px; border-radius:8px; box-shadow:var(--shadow-1);
+  }
+  .topo-map-layer-toggle button{
+    border:none; background:transparent; padding:5px 9px; border-radius:6px; font-size:11px; cursor:pointer; color:var(--ink-2);
+  }
+  .topo-map-layer-toggle button.on{ background:var(--wire-blue); color:#fff; }
+
+  /* ---- Efek "hidup" di peta hybrid — mendekatkan tampilan ke referensi (glow + label permanen) ---- */
+  @keyframes topo-marker-pulse-ok{ 0%{ box-shadow:0 0 0 0 rgba(22,163,74,.55);} 100%{ box-shadow:0 0 0 14px rgba(22,163,74,0);} }
+  @keyframes topo-marker-pulse-warn{ 0%{ box-shadow:0 0 0 0 rgba(217,119,6,.55);} 100%{ box-shadow:0 0 0 14px rgba(217,119,6,0);} }
+  @keyframes topo-marker-pulse-bad{ 0%{ box-shadow:0 0 0 0 rgba(220,38,38,.6);} 100%{ box-shadow:0 0 0 14px rgba(220,38,38,0);} }
+  .topo-glow-ok{ animation: topo-marker-pulse-ok 1.6s ease-out infinite; }
+  .topo-glow-warn{ animation: topo-marker-pulse-warn 1.4s ease-out infinite; }
+  .topo-glow-bad{ animation: topo-marker-pulse-bad 1.1s ease-out infinite; }
+  .topo-map-label{
+    background:rgba(20,23,28,.82) !important; border:none !important; color:#fff !important;
+    font-size:10.5px !important; font-weight:600; padding:2px 7px !important; border-radius:5px !important;
+    box-shadow:none !important;
+  }
+  .topo-map-label::before{ display:none !important; }
+  .topo-link-popup{ font-size:12px; min-width:150px; }
+  .topo-link-popup .tlp-title{ font-weight:700; margin-bottom:4px; }
+  .topo-link-popup .tlp-row{ display:flex; justify-content:space-between; gap:10px; color:var(--ink-3); font-size:11px; padding:2px 0; }
+  .topo-livebox{
+    background:rgba(20,23,28,.86); color:#fff; border-radius:8px; padding:9px 12px; font-family:var(--mono);
+    font-size:11px; line-height:1.6; box-shadow:0 2px 10px rgba(0,0,0,.3); min-width:120px;
+  }
+  .topo-livebox b{ display:inline-block; width:38px; }
+  .topo-livebox .tlb-ok{ color:#4ade80; }
+  .topo-livebox .tlb-warn{ color:#fbbf24; }
+  .topo-livebox .tlb-bad{ color:#f87171; }
 
   /* ============ TABLE ============ */
   .table-wrap{ background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-m); overflow:hidden; box-shadow:var(--shadow-1); }
@@ -331,8 +367,8 @@
   .dblock label{ display:block; font-size:11px; color:var(--ink-3); font-weight:600; text-transform:uppercase; letter-spacing:.4px; margin-bottom:7px; }
   .info-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px 14px; font-size:13px; }
   .info-grid .ig-label{ color:var(--ink-3); font-size:11px; margin-bottom:2px; }
-  .drawer-actions{ display:flex; gap:8px; padding:16px 22px; border-top:1px solid var(--line); }
-  .drawer-actions .btn{ flex:1; }
+  .drawer-actions{ display:flex; gap:8px; padding:16px 22px; border-top:1px solid var(--line); flex-wrap:wrap; }
+  .drawer-actions .btn{ flex:1 1 calc(50% - 4px); min-width:120px; }
   .audit-mini{ font-size:11px; color:var(--ink-3); font-family:var(--mono); }
 
   /* ============ VOUCHER PAGE ============ */
@@ -473,8 +509,10 @@
     .modal-box{ max-width:100%; }
   }
 </style>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/3.6.2/maplibre-gl.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/3.6.2/maplibre-gl.min.js"></script>
+<script>window.initMap = function(){ window.__gmapsCallbackFired = true; };</script>
+<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAOVYRIgupAurZup5y1PRh8Ismb1A3lLao&libraries=places&callback=initMap" async defer></script>
 </head>
 <body>
 
@@ -879,11 +917,15 @@
             <button class="btn btn-primary" style="width:auto; padding:9px 16px;" onclick="startPlaceNewDevice()">+ Tambah Perangkat di Peta</button>
             <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
               <button class="chip" id="edit-path-toggle-btn" onclick="toggleEditPathMode()">✏️ Edit Jalur Kabel</button>
+              <button class="chip on" id="map-engine-maplibre-btn" onclick="switchMapEngine('maplibre')">MapLibre (Edit)</button>
+              <button class="chip" id="map-engine-google-btn" onclick="switchMapEngine('google')">Google Satelit (Referensi)</button>
               <span class="hint" id="map-mode-hint"></span>
             </div>
           </div>
-          
+          <div class="audit-mini" id="map-engine-google-note" style="display:none; margin-bottom:8px;">Tampilan referensi visual saja (citra satelit Google) — tidak bisa menambah/menggeser perangkat atau mengedit jalur kabel di sini. Kembali ke "MapLibre (Edit)" untuk mengedit.</div>
+
           <div id="topology-map" style="height:560px; border-radius:12px; overflow:hidden; border:1px solid var(--line-2);"></div>
+          <div id="topology-map-google" style="display:none; height:560px; border-radius:12px; overflow:hidden; border:1px solid var(--line-2);"></div>
           <div class="map-legend" style="position:static; margin-top:8px; display:flex; flex-wrap:wrap; gap:12px; background:none; box-shadow:none; padding:0;">
             <div class="row"><span class="sw" style="background:#2563eb"></span>Router/MikroTik</div>
             <div class="row"><span class="sw" style="background:#0891b2"></span>OLT</div>
@@ -1610,6 +1652,7 @@
     </div>
   </div>
   <div class="drawer-actions">
+    <button class="btn btn-ghost" onclick="openCustomerModal(currentCustomerId)">Edit Pelanggan</button>
     <button class="btn btn-ghost" onclick="regenPassword()">Ganti Sandi</button>
     <button class="btn btn-danger" id="d-toggle-status" onclick="toggleIsolir()">Isolir Pelanggan</button>
     <button class="btn btn-ghost" style="color:var(--off); border-color:var(--off);" onclick="confirmDeleteCustomer()">Hapus Pelanggan</button>
@@ -2076,7 +2119,7 @@
 <div class="modal-overlay" id="customer-modal-overlay" onclick="if(event.target===this) closeCustomerModal()">
   <div class="modal-box">
     <div class="modal-head">
-      <h3>Tambah Pelanggan</h3>
+      <h3 id="customer-modal-title">Tambah Pelanggan</h3>
       <button class="drawer-close" onclick="closeCustomerModal()">
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg>
       </button>
@@ -2813,21 +2856,28 @@
     }
   }
   // ---------- CUSTOMER: Tambah & Hapus Pelanggan ----------
-  function openCustomerModal(){
+  let editingCustomerId = null;
+  function openCustomerModal(customerId){
+    editingCustomerId = customerId || null;
+    const c = editingCustomerId ? customers.find(x=>x.id===editingCustomerId) : null;
+
+    document.getElementById('customer-modal-title').textContent = c ? 'Edit Pelanggan' : 'Tambah Pelanggan';
+
     const sel = document.getElementById('cu-site');
     sel.innerHTML = sites.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
-    sel.value = currentSite!=='all' ? currentSite : (sites[0] && sites[0].id) || '';
+    sel.value = c ? c.site_id : (currentSite!=='all' ? currentSite : (sites[0] && sites[0].id) || '');
 
-    document.getElementById('cu-name').value = '';
-    document.getElementById('cu-code').value = '';
-    document.getElementById('cu-address').value = '';
-    document.getElementById('cu-access').value = 'LAN_HUB';
-    document.getElementById('cu-package').value = '';
-    document.getElementById('cu-username').value = '';
+    document.getElementById('cu-name').value = c ? c.name : '';
+    document.getElementById('cu-code').value = c ? c.customer_code : '';
+    document.getElementById('cu-address').value = c ? (c.address||'') : '';
+    document.getElementById('cu-access').value = c ? c.access_type : 'LAN_HUB';
+    document.getElementById('cu-package').value = c ? (c.package||'') : '';
+    document.getElementById('cu-username').value = c ? (c.pppoe_username||'') : '';
     document.getElementById('customer-modal-overlay').classList.add('open');
   }
   function closeCustomerModal(){
     document.getElementById('customer-modal-overlay').classList.remove('open');
+    editingCustomerId = null;
   }
   async function saveCustomer(){
     const siteId = document.getElementById('cu-site').value;
@@ -2847,17 +2897,24 @@
       const payload = {
         site_id: siteId, customer_code: code, name,
         address: address || null, access_type: accessType,
-        package: pkg || null, pppoe_username: username || null,
-        status: 'Offline'
+        package: pkg || null, pppoe_username: username || null
       };
-      const { error } = await sb.from('customers').insert(payload);
+      let error;
+      if(editingCustomerId){
+        ({ error } = await sb.from('customers').update(payload).eq('id', editingCustomerId));
+      } else {
+        payload.status = 'Offline';
+        ({ error } = await sb.from('customers').insert(payload));
+      }
       if(error){ showToast('Gagal menyimpan pelanggan: ' + error.message); return; }
 
       const { data, error: reErr } = await sb.from('customers').select('*').order('name');
       if(!reErr) customers = data || [];
       renderCustomerTable(document.getElementById('global-search').value);
+      const wasEditing = !!editingCustomerId;
       closeCustomerModal();
-      showToast('Pelanggan berhasil ditambahkan');
+      if(wasEditing && document.getElementById('drawer').classList.contains('open')) openDrawer(editingCustomerId || currentCustomerId);
+      showToast(wasEditing ? 'Pelanggan berhasil diperbarui' : 'Pelanggan berhasil ditambahkan');
     } catch(e){
       showToast('Terjadi kesalahan: ' + (e && e.message ? e.message : String(e)));
     } finally {
@@ -2869,7 +2926,7 @@
     if(!c) return;
     const typed = prompt(`Menghapus pelanggan "${c.name}" akan menghapus juga riwayat tiket & invoice yang tertaut.\nTindakan ini tidak bisa dibatalkan.\n\nKetik persis "${c.name}" untuk konfirmasi hapus:`);
     if(typed === null) return;
-    if(typed.trim() !== c.name.trim()){ showToast('Nama tidak cocok — penghapusan dibatalkan'); return; }
+    if(normalizeConfirmText(typed) !== normalizeConfirmText(c.name)){ showToast('Nama tidak cocok — penghapusan dibatalkan'); return; }
 
     const { error } = await sb.from('customers').delete().eq('id', c.id);
     if(error){ showToast('Gagal menghapus pelanggan: ' + error.message); return; }
@@ -2967,6 +3024,27 @@
     showToast('Tes koneksi dikirim ke agent — hasil muncul di kartu server dalam beberapa detik');
   }
 
+  // Konfirmasi "ketik ulang nama" untuk aksi hapus permanen (server & pelanggan).
+  // Dibuat toleran terhadap hal-hal yang gampang beda saat mengetik ulang di HP:
+  // em dash (—) vs en dash (–) vs hyphen biasa (-), spasi ganda, dan huruf besar/kecil —
+  // tanpa mengurangi maksud aslinya (tetap harus mengetik nama yang benar).
+  function normalizeConfirmText(s){
+    return (s || '')
+      .trim()
+      .toLowerCase()
+      .replace(/[\u2012-\u2015\u2212]/g, '-') // berbagai jenis dash (–—−ˉ) → hyphen biasa
+      .replace(/\s+/g, ' ');
+  }
+  function confirmExactTyped(promptMessage, expectedName){
+    const typed = prompt(promptMessage);
+    if(typed === null) return false;
+    if(normalizeConfirmText(typed) !== normalizeConfirmText(expectedName)){
+      showToast('Nama tidak cocok — penghapusan dibatalkan');
+      return false;
+    }
+    return true;
+  }
+
   async function confirmDeleteSite(siteId){
     const s = sites.find(s=>s.id===siteId);
     if(!s) return;
@@ -2974,7 +3052,7 @@
     const warnCust = custCount ? `\n\n⚠️ Server ini masih punya ${custCount} data pelanggan — semuanya IKUT TERHAPUS.` : '';
     const typed = prompt(`Menghapus server "${s.name}" tidak bisa dibatalkan.${warnCust}\n\nKetik persis "${s.name}" untuk konfirmasi hapus:`);
     if(typed === null) return;
-    if(typed.trim() !== s.name.trim()){ showToast('Nama tidak cocok — penghapusan dibatalkan'); return; }
+    if(normalizeConfirmText(typed) !== normalizeConfirmText(s.name)){ showToast('Nama tidak cocok — penghapusan dibatalkan'); return; }
 
     const { error } = await sb.rpc('delete_site', { p_site_id: siteId });
     if(error){ showToast('Gagal menghapus server: ' + error.message); return; }
@@ -3900,73 +3978,153 @@
     }
   }
 
+  function switchTopologyView(mode, btn){
+    topologyViewMode = mode;
+    document.querySelectorAll('#page-topology [data-nt-view]').forEach(c=>c.classList.remove('on'));
+    btn.classList.add('on');
+    document.getElementById('topology-diagram-view').style.display = mode==='diagram' ? '' : 'none';
+    document.getElementById('topology-map-view').style.display = mode==='map' ? '' : 'none';
+    if(mode==='map'){
+      if(!topologyMapInstance) initTopologyMap();
+      setTimeout(()=>{ if(topologyMapInstance){ topologyMapInstance.resize(); renderTopologyMap(); } }, 60);
+    }
+  }
+
+  function renderTopologyMapIfActive(){
+    const pageEl = document.getElementById('page-topology');
+    if(topologyViewMode==='map' && pageEl && pageEl.classList.contains('active')){
+      if(!topologyMapInstance) initTopologyMap();
+      renderTopologyMap();
+    }
+  }
+
+  // MapLibre GL sebagai ENGINE UTAMA untuk menggambar & mengedit jaringan FTTH
+  // (marker perangkat, jalur kabel, drag-to-move, edit waypoint). Google Maps
+  // (lihat initMap() & switchMapEngine() di bawah) HANYA tampilan referensi
+  // visual terpisah — tidak dipakai untuk mengedit apa pun, sesuai instruksi.
+  //
+  // Catatan koordinat: seluruh data di app ini (network_nodes.lat/lng,
+  // network_links.waypoints) tetap disimpan sebagai [lat, lng] seperti
+  // sebelumnya (tidak diubah, supaya tidak perlu migrasi data). MapLibre
+  // sendiri butuh urutan [lng, lat] di setiap API-nya — konversi HANYA
+  // dilakukan di titik-titik yang benar-benar bicara ke MapLibre lewat
+  // helper toLngLat()/fromLngLat() di bawah, supaya tidak campur aduk.
+  function toLngLat(latlng){ return [latlng[1], latlng[0]]; }
+  function fromLngLat(lnglat){ return [lnglat[1], lnglat[0]]; }
+
   function initTopologyMap(){
     const mapEl = document.getElementById('topology-map');
     if(!mapEl || topologyMapInstance) return;
-    // Titik tengah default Indonesia — akan otomatis fit ke node begitu ada data.
-    topologyMapInstance = L.map('topology-map').setView([-6.9, 107.6], 13);
 
-    const streets = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 21, attribution: '&copy; OpenStreetMap contributors'
+    // Style raster murni (tanpa vector/API key) — 2 sumber ubin sekaligus
+    // dimuat (satelit Esri + jalan OSM), lalu ditukar lewat visibility layer
+    // (bukan setStyle) supaya source/layer perangkat & jalur tidak ikut hilang
+    // saat ganti tampilan. Ganti MAPBOX_TOKEN kalau ingin citra lebih tajam.
+    const MAPBOX_TOKEN = ''; // isi token publik Mapbox di sini kalau punya, mis. 'pk.eyJ1Ijoi...'
+    const satelliteTiles = MAPBOX_TOKEN
+      ? [`https://api.mapbox.com/styles/v1/mapbox/satellite-streets-v12/tiles/{z}/{x}/{y}?access_token=${MAPBOX_TOKEN}`]
+      : ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'];
+
+    topologyMapInstance = new maplibregl.Map({
+      container: 'topology-map',
+      center: [107.6, -6.9], // [lng, lat] — Indonesia, otomatis fit ke node begitu ada data
+      zoom: 13,
+      style: {
+        version: 8,
+        sources: {
+          satellite: { type:'raster', tiles: satelliteTiles, tileSize:256, attribution: MAPBOX_TOKEN ? '&copy; Mapbox' : '&copy; Esri' },
+          streets:   { type:'raster', tiles: ['https://a.tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize:256, attribution: '&copy; OpenStreetMap contributors' },
+          labels:    { type:'raster', tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}'], tileSize:256 },
+        },
+        layers: [
+          { id:'satellite-layer', type:'raster', source:'satellite', layout:{ visibility:'visible' } },
+          { id:'streets-layer',   type:'raster', source:'streets',   layout:{ visibility:'none' } },
+          { id:'labels-layer',    type:'raster', source:'labels',    layout:{ visibility:'visible' } },
+        ],
+      },
     });
-    // Esri World Imagery — citra satelit gratis tanpa API key. Cocok untuk
-    // pemakaian ringan-menengah; kalau volume sangat tinggi, Esri punya batas
-    // pemakaian gratisnya sendiri (di luar kendali kita, bukan bug app).
-    // CATATAN KEJERNIHAN: resolusi citra Esri untuk sebagian area pedesaan
-    // Indonesia memang lebih rendah dibanding Google Maps — ini keterbatasan
-    // sumber data Esri sendiri, bukan bug pengaturan zoom. Kalau MAPBOX_TOKEN
-    // di bawah diisi (gratis, daftar di mapbox.com, tanpa kartu kredit untuk
-    // pemakaian ringan), citra Mapbox Satellite dipakai sebagai default —
-    // umumnya jauh lebih tajam untuk area Indonesia. Tanpa token, otomatis
-    // fallback ke Esri seperti sebelumnya (tidak ada yang rusak).
-    const MAPBOX_TOKEN = ''; // isi token publik Mapbox Anda di sini kalau punya, mis. 'pk.eyJ1Ijoi...'
-    const satelliteEsri = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-      maxZoom: 20, attribution: 'Tiles &copy; Esri'
-    });
-    // Label jalan & nama tempat di atas citra satelit — membantu keterbacaan
-    // meski resolusi foto satelitnya sendiri terbatas.
-    const satelliteLabels = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
-      maxZoom: 20, attribution: 'Labels &copy; Esri', pane: 'overlayPane'
-    });
-    let satellite = satelliteEsri;
-    const layerControlBase = { 'Satelit': satelliteEsri, 'Peta Jalan': streets };
-    if(MAPBOX_TOKEN){
-      const satelliteMapbox = L.tileLayer(`https://api.mapbox.com/styles/v1/mapbox/satellite-streets-v12/tiles/{z}/{x}/{y}?access_token=${MAPBOX_TOKEN}`, {
-        maxZoom: 22, attribution: '&copy; Mapbox &copy; OpenStreetMap'
+    topologyMapInstance.addControl(new maplibregl.NavigationControl(), 'top-right');
+
+    topologyMapInstance.on('load', ()=>{
+      // Sumber kosong untuk jalur kabel — diisi setData() tiap renderTopologyMap()
+      topologyMapInstance.addSource('links-source', { type:'geojson', data: { type:'FeatureCollection', features: [] } });
+      topologyMapInstance.addLayer({
+        id: 'links-layer', type:'line', source:'links-source',
+        paint: {
+          'line-color': ['get','color'],
+          'line-width': ['case', ['get','hasTraffic'], 4, 3],
+          'line-opacity': 0.85,
+          'line-dasharray': ['case', ['get','hasTraffic'], ['literal',[1,1.2]], ['literal',[1,0]]],
+        },
       });
-      satellite = satelliteMapbox;
-      layerControlBase['Satelit (Mapbox, lebih tajam)'] = satelliteMapbox;
-    }
-    satellite.addTo(topologyMapInstance); // default: citra satelit, sesuai referensi
-    satelliteLabels.addTo(topologyMapInstance);
-    L.control.layers(layerControlBase, { 'Label Jalan/Tempat': satelliteLabels }, { position:'topright', collapsed:true }).addTo(topologyMapInstance);
+      // Animasi "trafik berjalan" — geser fase dash tiap frame, hanya berlaku
+      // efeknya secara visual pada garis yang punya line-dasharray aktif.
+      let dashStep = 0;
+      const dashSequences = [[0,4],[0.5,3.5],[1,3],[1.5,2.5],[2,2],[2.5,1.5],[3,1],[3.5,0.5]];
+      function animateDash(){
+        if(!topologyMapInstance.getLayer('links-layer')) return;
+        dashStep = (dashStep+1) % dashSequences.length;
+        topologyMapInstance.setPaintProperty('links-layer', 'line-dasharray', ['case', ['get','hasTraffic'], ['literal', dashSequences[dashStep]], ['literal',[1,0]]]);
+        requestAnimationFrame(()=>setTimeout(animateDash, 90));
+      }
+      animateDash();
+
+      renderTopologyMap();
+    });
+
+    // Toggle Peta Jalan / Satelit + Label — tombol HTML biasa di pojok kanan
+    // atas peta (bukan IControl bawaan MapLibre, cukup DOM overlay saja).
+    const layerToggle = document.createElement('div');
+    layerToggle.className = 'topo-map-layer-toggle';
+    layerToggle.innerHTML = `
+      <button type="button" data-layer="satellite" class="on">Satelit</button>
+      <button type="button" data-layer="streets">Peta Jalan</button>
+      <button type="button" data-layer="labels" class="on">Label</button>
+    `;
+    layerToggle.querySelectorAll('button').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const key = btn.dataset.layer;
+        if(key==='labels'){
+          const vis = topologyMapInstance.getLayoutProperty('labels-layer','visibility');
+          const next = vis==='visible' ? 'none' : 'visible';
+          topologyMapInstance.setLayoutProperty('labels-layer','visibility', next);
+          btn.classList.toggle('on', next==='visible');
+        } else {
+          topologyMapInstance.setLayoutProperty('satellite-layer','visibility', key==='satellite' ? 'visible' : 'none');
+          topologyMapInstance.setLayoutProperty('streets-layer','visibility', key==='streets' ? 'visible' : 'none');
+          layerToggle.querySelectorAll('[data-layer="satellite"],[data-layer="streets"]').forEach(b=>b.classList.remove('on'));
+          btn.classList.add('on');
+        }
+      });
+    });
+    mapEl.appendChild(layerToggle);
 
     // Kotak cari alamat (geocoding lewat Nominatim/OpenStreetMap, gratis tanpa API key)
-    const searchControl = L.control({ position:'topleft' });
-    searchControl.onAdd = function(){
-      const box = L.DomUtil.create('div', 'topology-search-box');
-      box.innerHTML = `<input type="text" id="topology-map-search" placeholder="Cari alamat…">`;
-      L.DomEvent.disableClickPropagation(box);
-      return box;
-    };
-    searchControl.addTo(topologyMapInstance);
-    let searchDebounce = null;
+    const searchBox = document.createElement('div');
+    searchBox.className = 'topology-search-box';
+    searchBox.innerHTML = `<input type="text" id="topology-map-search" placeholder="Cari alamat…">`;
+    mapEl.appendChild(searchBox);
     document.addEventListener('keydown', (e)=>{
-      if(e.target && e.target.id==='topology-map-search' && e.key==='Enter'){
-        clearTimeout(searchDebounce);
-        geocodeAndFly(e.target.value);
-      }
+      if(e.target && e.target.id==='topology-map-search' && e.key==='Enter') geocodeAndFly(e.target.value);
     });
+
+    // Kotak status router live (CPU/RAM/Disk/Uptime) — sama seperti sebelumnya,
+    // cuma DOM overlay biasa, bukan Leaflet control lagi.
+    const liveBox = document.createElement('div');
+    liveBox.className = 'topo-livebox';
+    liveBox.id = 'topology-livebox';
+    liveBox.style.display = 'none';
+    mapEl.appendChild(liveBox);
 
     topologyMapInstance.on('click', (e)=>{
       if(placingNewDevice){
         placingNewDevice = false;
         document.getElementById('map-mode-hint').textContent = '';
-        openDeviceModal('create', null, { lat: e.latlng.lat, lng: e.latlng.lng });
+        openDeviceModal('create', null, { lat: e.lngLat.lat, lng: e.lngLat.lng });
         return;
       }
       if(editPathMode && editingLinkNodeId){
-        editingWaypoints.push([e.latlng.lat, e.latlng.lng]);
+        editingWaypoints.push([e.lngLat.lat, e.lngLat.lng]);
         redrawEditingPath();
       }
     });
@@ -3980,7 +4138,7 @@
       const results = await res.json();
       if(!results || !results.length){ showToast('Alamat tidak ditemukan'); return; }
       const { lat, lon } = results[0];
-      topologyMapInstance.setView([parseFloat(lat), parseFloat(lon)], 17);
+      topologyMapInstance.flyTo({ center: [parseFloat(lon), parseFloat(lat)], zoom: 17 });
     } catch(e){
       showToast('Gagal mencari alamat — coba lagi');
     }
@@ -3991,17 +4149,21 @@
     return null;
   }
 
+  let topologyPopup = null; // satu maplibregl.Popup dipakai ulang untuk hover jalur kabel
+
   function renderTopologyMap(){
-    if(!topologyMapInstance) return;
-    // Bersihkan layer lama
-    Object.values(topologyMarkers).forEach(m=>topologyMapInstance.removeLayer(m));
-    Object.values(topologyPolylines).forEach(l=>topologyMapInstance.removeLayer(l));
-    topologyMarkers = {}; topologyPolylines = {};
+    if(!topologyMapInstance || !topologyMapInstance.getSource) return;
+    if(!topologyMapInstance.isStyleLoaded() || !topologyMapInstance.getSource('links-source')) return; // belum 'load', ditunda ke event load
+
+    Object.values(topologyMarkers).forEach(m=>m.remove());
+    topologyMarkers = {};
 
     const scoped = networkNodes.filter(inSite).filter(n=>nodeLatLng(n));
     const bounds = [];
+    const linkFeatures = [];
 
-    // Gambar jalur dulu (di bawah marker)
+    // Jalur kabel — 1 GeoJSON source berisi semua edge sekaligus (lebih ringan
+    // & lebih mudah di-style data-driven daripada 1 layer per polyline seperti Leaflet dulu).
     scoped.forEach(n=>{
       if(!n.parent_id) return;
       const parent = networkNodes.find(p=>p.id===n.parent_id);
@@ -4017,55 +4179,105 @@
 
       const meta = deviceTypeMeta[n.type] || { color:'#94a3b8' };
       const traf = getNodeTrafficRollup(n, scoped.filter(x=>x.site_id===n.site_id));
-      const hasTraffic = traf && ((traf.down||0) > 0 || (traf.up||0) > 0);
-      const poly = L.polyline(points, {
-        color: meta.color, weight: 3, opacity: 0.85,
-        className: hasTraffic ? 'topo-map-link-active' : ''
-      }).addTo(topologyMapInstance);
+      const hasTraffic = !!(traf && ((traf.down||0) > 0 || (traf.up||0) > 0));
       const cableLabel = cableLengthLabel(link, points);
       const trafLabel = traf ? `↓${traf.down!=null?traf.down.toFixed(1):'—'} / ↑${traf.up!=null?traf.up.toFixed(1):'—'} Mbps` : null;
-      poly.bindTooltip(`Kabel: ${cableLabel}` + (trafLabel ? `<br>${trafLabel}` : ''), { sticky:true });
-      poly.on('click', (e)=>{
-        if(!editPathMode) return;
-        L.DomEvent.stopPropagation(e);
-        beginEditPath(n.id);
+
+      linkFeatures.push({
+        type:'Feature',
+        properties: { node_id:n.id, color:meta.color, hasTraffic, cableLabel, trafLabel, deviceLabel:deviceLabel(n), typeLabel:deviceTypeLabel(n.type) },
+        geometry: { type:'LineString', coordinates: points.map(toLngLat) },
       });
-      topologyPolylines[n.id] = poly;
       points.forEach(p=>bounds.push(p));
     });
+    topologyMapInstance.getSource('links-source').setData({ type:'FeatureCollection', features: linkFeatures });
 
-    // Lalu marker perangkat
+    // Hover/klik jalur — daftarkan sekali saja (aman dipanggil ulang, listener lama otomatis tidak dobel karena handler sama & pakai flag)
+    if(!topologyMapInstance._linksEventsBound){
+      topologyMapInstance._linksEventsBound = true;
+      topologyMapInstance.on('mousemove', 'links-layer', (e)=>{
+        if(editPathMode) return;
+        topologyMapInstance.getCanvas().style.cursor = 'pointer';
+        const f = e.features[0]; if(!f) return;
+        const html = `<div class="topo-link-popup"><div class="tlp-title">${f.properties.typeLabel}</div><div class="tlp-row"><span>Menuju</span><span>${f.properties.deviceLabel}</span></div><div class="tlp-row"><span>Panjang kabel</span><span>${f.properties.cableLabel}</span></div>${f.properties.trafLabel ? `<div class="tlp-row"><span>Traffic</span><span>${f.properties.trafLabel}</span></div>` : ''}</div>`;
+        if(!topologyPopup) topologyPopup = new maplibregl.Popup({ closeButton:false, closeOnClick:false, offset:8 });
+        topologyPopup.setLngLat(e.lngLat).setHTML(html).addTo(topologyMapInstance);
+      });
+      topologyMapInstance.on('mouseleave', 'links-layer', ()=>{
+        topologyMapInstance.getCanvas().style.cursor = '';
+        if(topologyPopup) topologyPopup.remove();
+      });
+      topologyMapInstance.on('click', 'links-layer', (e)=>{
+        if(!editPathMode) return;
+        const f = e.features[0]; if(!f) return;
+        beginEditPath(f.properties.node_id);
+      });
+    }
+
+    // Marker perangkat
     scoped.forEach(n=>{
       const ll = nodeLatLng(n);
       const meta = deviceTypeMeta[n.type] || { color:'#94a3b8', label:n.type, icon:'<circle cx="12" cy="12" r="5"/>' };
       const h = nodeHealth(n.id);
-      const ringColor = h.total>0 ? (h.cls==='bad' ? '#dc2626' : h.cls==='warn' ? '#d97706' : '#16a34a') : '#fff';
-      const icon = L.divIcon({
-        className: 'topology-marker',
-        html: `<div style="width:30px; height:30px; border-radius:50%; background:${meta.color}; border:3px solid ${ringColor}; box-shadow:0 1px 4px rgba(0,0,0,.35); display:flex; align-items:center; justify-content:center;">
-                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${meta.icon||''}</svg>
-               </div>`,
-        iconSize: [30,30], iconAnchor:[15,15]
-      });
-      const marker = L.marker(ll, { icon, draggable: !n.locked }).addTo(topologyMapInstance);
-      const tipText = h.total>0
-        ? `${deviceLabel(n)} · ${deviceTypeLabel(n.type)}${n.locked ? ' 🔒' : ''}<br>${h.online} online · ${h.offline} offline · ${h.isolir} isolir`
-        : `${deviceLabel(n)} · ${deviceTypeLabel(n.type)}${n.locked ? ' 🔒' : ''}`;
-      marker.bindTooltip(tipText, { direction:'top', offset:[0,-16] });
+      const healthTotal = h.total>0;
+      const ringColor = healthTotal ? (h.cls==='bad' ? '#dc2626' : h.cls==='warn' ? '#d97706' : '#16a34a') : '#fff';
+      const glowClass = healthTotal ? (h.cls==='bad' ? 'topo-glow-bad' : h.cls==='warn' ? 'topo-glow-warn' : 'topo-glow-ok') : '';
+      const labelText = healthTotal ? `${deviceLabel(n)} · ${h.online}/${h.total} online` : deviceLabel(n);
+
+      const el = document.createElement('div');
+      el.className = 'topology-marker-wrap';
+      el.style.cssText = 'display:flex; flex-direction:column; align-items:center; cursor:pointer;';
+      el.innerHTML = `
+        <div class="${glowClass}" style="width:30px; height:30px; border-radius:50%; background:${meta.color}; border:3px solid ${ringColor}; box-shadow:0 1px 4px rgba(0,0,0,.35); display:flex; align-items:center; justify-content:center;">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${meta.icon||''}</svg>
+        </div>
+        <div class="topo-map-label">${labelText}</div>
+      `;
+      el.addEventListener('click', (ev)=>{ ev.stopPropagation(); if(!editPathMode) openDeviceModal('edit', n.id); });
+
+      const marker = new maplibregl.Marker({ element: el, draggable: !n.locked, anchor:'center' })
+        .setLngLat(toLngLat(ll))
+        .addTo(topologyMapInstance);
       marker.on('dragend', async ()=>{
-        const pos = marker.getLatLng();
-        const { error } = await sb.from('network_nodes').update({ lat: pos.lat, lng: pos.lng }).eq('id', n.id);
+        const pos = fromLngLat([marker.getLngLat().lng, marker.getLngLat().lat]); // [lat,lng], konsisten dgn penyimpanan
+        const { error } = await sb.from('network_nodes').update({ lat: pos[0], lng: pos[1] }).eq('id', n.id);
         if(error){ showToast('Gagal menyimpan posisi: ' + error.message); return; }
         const idx = networkNodes.findIndex(x=>x.id===n.id);
-        if(idx>-1){ networkNodes[idx].lat = pos.lat; networkNodes[idx].lng = pos.lng; }
-        renderTopologyMap(); // gambar ulang jalur yang nempel ke node ini
+        if(idx>-1){ networkNodes[idx].lat = pos[0]; networkNodes[idx].lng = pos[1]; }
+        renderTopologyMap();
       });
-      marker.on('click', ()=>{ if(!editPathMode) openDeviceModal('edit', n.id); });
       topologyMarkers[n.id] = marker;
       bounds.push(ll);
     });
 
-    if(bounds.length) topologyMapInstance.fitBounds(bounds, { padding:[40,40], maxZoom:18 });
+    if(bounds.length){
+      const lngs = bounds.map(b=>b[1]), lats = bounds.map(b=>b[0]);
+      topologyMapInstance.fitBounds([[Math.min(...lngs),Math.min(...lats)],[Math.max(...lngs),Math.max(...lats)]], { padding:40, maxZoom:18 });
+    }
+
+    // Isi/kosongkan kotak status router live sesuai server yang dipilih
+    const liveBox = document.getElementById('topology-livebox');
+    if(liveBox){
+      if(currentSite==='all'){
+        liveBox.style.display = 'none';
+      } else {
+        const stat = siteLiveStats.find(s=>s.site_id===currentSite);
+        if(!stat){
+          liveBox.style.display = 'none';
+        } else {
+          const cls = v => v==null ? '' : v>=90 ? 'tlb-bad' : v>=70 ? 'tlb-warn' : 'tlb-ok';
+          liveBox.style.display = '';
+          liveBox.innerHTML = `
+            <div><b>CPU</b> <span class="${cls(stat.cpu_load)}">${stat.cpu_load!=null ? stat.cpu_load+'%' : '—'}</span></div>
+            <div><b>RAM</b> <span class="${cls(stat.memory_used_percent)}">${stat.memory_used_percent!=null ? stat.memory_used_percent+'%' : '—'}</span></div>
+            <div><b>HDD</b> <span class="${cls(stat.disk_used_percent)}">${stat.disk_used_percent!=null ? stat.disk_used_percent+'%' : '—'}</span></div>
+            <div><b>Up</b> ${stat.uptime || '—'}</div>
+          `;
+        }
+      }
+    }
+
+    if(mapEngineMode==='google') syncGoogleMapMarkers();
   }
 
   function startPlaceNewDevice(){
@@ -4096,7 +4308,7 @@
   }
 
   function redrawEditingPath(){
-    topologyWaypointHandles.forEach(h=>topologyMapInstance.removeLayer(h));
+    topologyWaypointHandles.forEach(h=>h.remove());
     topologyWaypointHandles = [];
     if(!editingLinkNodeId) return;
 
@@ -4107,26 +4319,42 @@
     if(!parentLL || !childLL) return;
 
     const fullPoints = [parentLL, ...editingWaypoints, childLL];
-    const existingPoly = topologyPolylines[editingLinkNodeId];
-    if(existingPoly) existingPoly.setLatLngs(fullPoints);
+    updateEditingLineOnMap(fullPoints);
 
     editingWaypoints.forEach((wp, idx)=>{
-      const handle = L.marker(wp, {
-        draggable: true,
-        icon: L.divIcon({ className:'', html:'<div style="width:14px;height:14px;border-radius:50%;background:#fff;border:3px solid #ea580c;"></div>', iconSize:[14,14], iconAnchor:[7,7] })
-      }).addTo(topologyMapInstance);
+      const el = document.createElement('div');
+      el.style.cssText = 'width:14px;height:14px;border-radius:50%;background:#fff;border:3px solid #ea580c;cursor:grab;';
+      const handle = new maplibregl.Marker({ element: el, draggable: true, anchor:'center' })
+        .setLngLat(toLngLat(wp))
+        .addTo(topologyMapInstance);
       handle.on('drag', ()=>{
-        const pos = handle.getLatLng();
+        const pos = handle.getLngLat();
         editingWaypoints[idx] = [pos.lat, pos.lng];
-        const poly = topologyPolylines[editingLinkNodeId];
-        if(poly) poly.setLatLngs([parentLL, ...editingWaypoints, childLL]);
+        updateEditingLineOnMap([parentLL, ...editingWaypoints, childLL]);
       });
-      handle.on('contextmenu', ()=>{
+      el.addEventListener('contextmenu', (ev)=>{
+        ev.preventDefault();
         editingWaypoints.splice(idx,1);
         redrawEditingPath();
       });
       topologyWaypointHandles.push(handle);
     });
+  }
+
+  // Selagi mode edit jalur aktif, garis yang sedang diedit digambar TERPISAH
+  // dari links-source utama (source khusus 'editing-line-source') supaya
+  // gerakannya mulus tanpa perlu render ulang seluruh peta tiap drag.
+  function updateEditingLineOnMap(points){
+    if(!topologyMapInstance.getSource('editing-line-source')){
+      topologyMapInstance.addSource('editing-line-source', { type:'geojson', data:{ type:'Feature', properties:{}, geometry:{ type:'LineString', coordinates:[] } } });
+      topologyMapInstance.addLayer({ id:'editing-line-layer', type:'line', source:'editing-line-source', paint:{ 'line-color':'#ea580c', 'line-width':3, 'line-dasharray':[2,1.5] } });
+    }
+    topologyMapInstance.getSource('editing-line-source').setData({ type:'Feature', properties:{}, geometry:{ type:'LineString', coordinates: points.map(toLngLat) } });
+  }
+  function clearEditingLineOnMap(){
+    if(topologyMapInstance && topologyMapInstance.getSource('editing-line-source')){
+      topologyMapInstance.getSource('editing-line-source').setData({ type:'Feature', properties:{}, geometry:{ type:'LineString', coordinates:[] } });
+    }
   }
 
   async function saveEditingPath(){
@@ -4160,12 +4388,91 @@
   function cancelEditPath(){
     editingLinkNodeId = null;
     editingWaypoints = [];
-    topologyWaypointHandles.forEach(h=>topologyMapInstance && topologyMapInstance.removeLayer(h));
+    topologyWaypointHandles.forEach(h=>h.remove());
     topologyWaypointHandles = [];
+    clearEditingLineOnMap();
     const hint = document.getElementById('map-mode-hint');
     if(hint) hint.textContent = editPathMode ? 'Klik jalur untuk edit' : '';
     renderTopologyMap();
   }
+
+  // =====================================================================
+  // GOOGLE MAPS — REFERENSI VISUAL SAJA (bukan engine editing). Diinisialisasi
+  // oleh callback resmi Google Maps JS API (lihat <script> tag di <head>).
+  // Marker di sini read-only (tidak draggable, klik tidak membuka modal edit)
+  // — kalau mau mengedit, harus balik ke tampilan "MapLibre (Edit)".
+  // =====================================================================
+  let googleMapInstance = null;
+  let googleMarkers = [];
+  let mapEngineMode = 'maplibre';
+  let googleMapsReady = false;
+
+  function initGoogleMapNow(){
+    // Logika asli — dipanggil lewat window.initMap (lihat serah-terima di
+    // bawah IIFE ini) begitu Google Maps JS API selesai dimuat, TIDAK PEDULI
+    // urutan loadingnya dibanding script utama ini (lihat stub awal di <head>).
+    googleMapsReady = true;
+    const el = document.getElementById('topology-map-google');
+    if(!el || googleMapInstance) return;
+    googleMapInstance = new google.maps.Map(el, {
+      center: { lat: -6.9, lng: 107.6 }, zoom: 13, mapTypeId: 'satellite',
+      streetViewControl: false, fullscreenControl: false, mapTypeControl: true,
+    });
+    if(mapEngineMode==='google') syncGoogleMapMarkers();
+  }
+  // Serah-terima dari stub di <head>: kalau Google Maps JS API SUDAH selesai
+  // load & sempat memanggil stub SEBELUM baris ini sempat jalan (script utama
+  // ini besar, butuh waktu parse), jalankan implementasi asli SEKARANG juga.
+  // Kalau BELUM, cukup pasang implementasi asli supaya dipanggil nanti.
+  window.initMap = initGoogleMapNow;
+  if(window.__gmapsCallbackFired) initGoogleMapNow();
+
+  function syncGoogleMapMarkers(){
+    if(!googleMapInstance) return;
+    googleMarkers.forEach(m=>m.setMap(null));
+    googleMarkers = [];
+    const scoped = networkNodes.filter(inSite).filter(n=>nodeLatLng(n));
+    const bounds = new google.maps.LatLngBounds();
+    scoped.forEach(n=>{
+      const ll = nodeLatLng(n);
+      const meta = deviceTypeMeta[n.type] || { color:'#94a3b8' };
+      const marker = new google.maps.Marker({
+        position: { lat: ll[0], lng: ll[1] }, map: googleMapInstance, title: deviceLabel(n),
+        icon: { path: google.maps.SymbolPath.CIRCLE, scale: 8, fillColor: meta.color, fillOpacity: 1, strokeColor:'#fff', strokeWeight: 2 },
+      });
+      googleMarkers.push(marker);
+      bounds.extend({ lat: ll[0], lng: ll[1] });
+    });
+    if(scoped.length) googleMapInstance.fitBounds(bounds);
+  }
+
+  function switchMapEngine(which){
+    mapEngineMode = which;
+    document.getElementById('map-engine-maplibre-btn').classList.toggle('on', which==='maplibre');
+    document.getElementById('map-engine-google-btn').classList.toggle('on', which==='google');
+    document.getElementById('topology-map').style.display = which==='maplibre' ? '' : 'none';
+    document.getElementById('topology-map-google').style.display = which==='google' ? '' : 'none';
+    document.getElementById('map-engine-google-note').style.display = which==='google' ? '' : 'none';
+
+    if(which==='google'){
+      if(!googleMapsReady){ showToast('Google Maps sedang dimuat, tunggu sebentar lalu coba lagi…'); return; }
+      if(!googleMapInstance) initMap();
+      setTimeout(()=>{
+        if(googleMapInstance){
+          google.maps.event.trigger(googleMapInstance, 'resize');
+          if(topologyMapInstance){
+            const c = topologyMapInstance.getCenter();
+            googleMapInstance.setCenter({ lat:c.lat, lng:c.lng });
+            googleMapInstance.setZoom(Math.round(topologyMapInstance.getZoom()));
+          }
+          syncGoogleMapMarkers();
+        }
+      }, 60);
+    } else {
+      setTimeout(()=>{ if(topologyMapInstance) topologyMapInstance.resize(); }, 60);
+    }
+  }
+
 
   const PORTED_TYPES = ['htb','odp_splitter','odp_jointbox'];
   function onDeviceTypeChange(){
