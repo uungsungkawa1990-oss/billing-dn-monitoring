@@ -2798,17 +2798,36 @@
 
   function initCustomerMap(){
     const mapEl = document.getElementById('customer-map');
-    if(!mapEl || customerMapInstance || typeof maplibregl==='undefined') return;
+    if(!mapEl || customerMapInstance) return;
+    if(typeof maplibregl==='undefined'){
+      mapEl.innerHTML = '<div class="empty-note" style="color:var(--off); padding:16px;">Library MapLibre GL gagal dimuat dari cdnjs.cloudflare.com — cek koneksi internet atau apakah domain ini diblokir (adblocker/firewall/CSP).</div>';
+      return;
+    }
 
-    customerMapInstance = new maplibregl.Map({
-      container: 'customer-map',
-      center: [107.6, -6.9], zoom: 12,
-      style: MAPTILER_STYLE_URL,
-    });
+    try {
+      customerMapInstance = new maplibregl.Map({
+        container: 'customer-map',
+        center: [107.6, -6.9], zoom: 12,
+        style: MAPTILER_STYLE_URL,
+      });
+    } catch(e){
+      mapEl.innerHTML = `<div class="empty-note" style="color:var(--off); padding:16px;">Peta gagal diinisialisasi: ${e && e.message ? e.message : e}</div>`;
+      console.error('initCustomerMap gagal:', e);
+      return;
+    }
     customerMapInstance.addControl(new maplibregl.NavigationControl(), 'top-right');
     customerMapInstance.on('load', ()=> renderPins());
     customerMapInstance.on('error', (e)=>{
-      console.error('MapTiler gagal dimuat (Peta Pelanggan):', e && e.error ? e.error.message : e);
+      const msg = e && e.error ? e.error.message : 'Kesalahan tidak diketahui';
+      console.error('MapTiler gagal dimuat (Peta Pelanggan):', msg, e);
+      let errBox = document.getElementById('customer-map-error');
+      if(!errBox){
+        errBox = document.createElement('div');
+        errBox.id = 'customer-map-error';
+        errBox.style.cssText = 'position:absolute; top:10px; left:10px; right:10px; z-index:9; background:#fee2e2; color:#991b1b; padding:8px 12px; border-radius:8px; font-size:12px;';
+        mapEl.appendChild(errBox);
+      }
+      errBox.textContent = `Peta gagal dimuat — ${msg}`;
     });
 
     const searchBox = document.createElement('div');
@@ -3948,6 +3967,7 @@
     const NS = 'http://www.w3.org/2000/svg';
 
     relevantSites.forEach(site=>{
+      try {
       const siteNodes = scoped.filter(n=>n.site_id===site.id);
       if(!siteNodes.length) return;
 
@@ -4058,6 +4078,19 @@
       scrollWrap.appendChild(svg);
       block.appendChild(scrollWrap);
       el.appendChild(block);
+      } catch(e){
+        // Diagnostik: sebelumnya kegagalan di sini bikin seluruh kotak topologi
+        // blank tanpa jejak apa pun (el.innerHTML sudah dikosongkan di atas,
+        // lalu exception di tengah loop menghentikan sisanya tanpa pernah
+        // ter-append). Sekarang errornya tampil langsung di layar, tidak perlu
+        // buka console dev tools untuk tahu penyebabnya.
+        console.error(`renderNetworkTopologyDiagram gagal untuk server "${site.name}":`, e);
+        const errBox = document.createElement('div');
+        errBox.className = 'empty-note';
+        errBox.style.color = 'var(--off)';
+        errBox.textContent = `Gagal menggambar topologi untuk "${site.name}": ${e && e.message ? e.message : e}`;
+        el.appendChild(errBox);
+      }
     });
 
     if(!el.children.length){
@@ -4135,16 +4168,35 @@
   function initTopologyMap(){
     const mapEl = document.getElementById('topology-map');
     if(!mapEl || topologyMapInstance) return;
+    if(typeof maplibregl==='undefined'){
+      mapEl.innerHTML = '<div class="empty-note" style="color:var(--off); padding:16px;">Library MapLibre GL gagal dimuat dari cdnjs.cloudflare.com — cek koneksi internet atau apakah domain ini diblokir (adblocker/firewall/CSP).</div>';
+      return;
+    }
 
-    topologyMapInstance = new maplibregl.Map({
-      container: 'topology-map',
-      center: [107.6, -6.9], // [lng, lat] — Indonesia, otomatis fit ke node begitu ada data
-      zoom: 13,
-      style: MAPTILER_STYLE_URL,
-    });
+    try {
+      topologyMapInstance = new maplibregl.Map({
+        container: 'topology-map',
+        center: [107.6, -6.9], // [lng, lat] — Indonesia, otomatis fit ke node begitu ada data
+        zoom: 13,
+        style: MAPTILER_STYLE_URL,
+      });
+    } catch(e){
+      mapEl.innerHTML = `<div class="empty-note" style="color:var(--off); padding:16px;">Peta gagal diinisialisasi: ${e && e.message ? e.message : e}</div>`;
+      console.error('initTopologyMap gagal:', e);
+      return;
+    }
     topologyMapInstance.addControl(new maplibregl.NavigationControl(), 'top-right');
     topologyMapInstance.on('error', (e)=>{
-      console.error('MapTiler gagal dimuat (Topologi Jaringan):', e && e.error ? e.error.message : e);
+      const msg = e && e.error ? e.error.message : 'Kesalahan tidak diketahui';
+      console.error('MapTiler gagal dimuat (Topologi Jaringan):', msg, e);
+      let errBox = document.getElementById('topology-map-error');
+      if(!errBox){
+        errBox = document.createElement('div');
+        errBox.id = 'topology-map-error';
+        errBox.style.cssText = 'position:absolute; top:10px; left:10px; right:10px; z-index:9; background:#fee2e2; color:#991b1b; padding:8px 12px; border-radius:8px; font-size:12px;';
+        mapEl.appendChild(errBox);
+      }
+      errBox.textContent = `Peta gagal dimuat — ${msg}`;
     });
 
     topologyMapInstance.on('load', ()=>{
